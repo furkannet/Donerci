@@ -133,10 +133,12 @@ button small{font-size:9px;margin-top:0}
   #terror{top:max(236px,calc(env(safe-area-inset-top) + 228px))!important}
   #pad{bottom:calc(max(8px,env(safe-area-inset-bottom)) + 215px)}
 }
+#vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.32) 100%)}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="vignette"></div>
 
 <div id="stats" class="panel"></div>
 <div id="rightCol">
@@ -550,6 +552,29 @@ scene.background = SKY_DUSK;
 scene.fog = new THREE.Fog(FOG_DUSK, 35, 110);
 
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 130); // uzak nesneler çizilmesin (performans)
+// gece gökyüzü: tek çizimde yıldızlar + ay (yalnızca gece görünür, kamerayı izler)
+const skyFx = new THREE.Group();
+skyFx.visible = false;
+(function(){
+  const N = 220, pos = new Float32Array(N * 3);
+  for(let i = 0; i < N; i++){
+    const a = Math.random() * Math.PI * 2, y = 0.08 + Math.random() * 0.92, r = Math.sqrt(1 - y * y);
+    pos[i*3] = Math.cos(a) * r * 100; pos[i*3+1] = y * 100; pos[i*3+2] = Math.sin(a) * r * 100;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({color:0xffffff, size:2, sizeAttenuation:false, transparent:true, opacity:0.85, fog:false, depthWrite:false}));
+  pts.frustumCulled = false;
+  skyFx.add(pts);
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,235,1)'); gr.addColorStop(0.35, 'rgba(255,250,220,.95)'); gr.addColorStop(0.5, 'rgba(255,250,220,.25)'); gr.addColorStop(1, 'rgba(255,250,220,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const moon = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv), fog:false, depthWrite:false}));
+  moon.position.set(-30, 55, -80); moon.scale.set(16, 16, 1);
+  skyFx.add(moon);
+})();
+scene.add(skyFx);
 camera.rotation.order = 'YXZ';
 
 const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x3b3024, 0.75);
@@ -628,6 +653,21 @@ function tex(w, h, fn){
   const t = new THREE.CanvasTexture(cv);
   t.anisotropy = 2;
   return t;
+}
+// sahte yumuşak gölge: gerçek gölge haritası yerine zemine yatan tek bir şeffaf daire (ortak geometri/malzeme)
+const BLOB_GEO = new THREE.CircleGeometry(1, 12).rotateX(-Math.PI / 2);
+const BLOB_MAT = new THREE.MeshBasicMaterial({
+  map: tex(64, 64, (g,w,h) => {
+    const gr = g.createRadialGradient(w/2, h/2, 0, w/2, h/2, w/2);
+    gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }),
+  transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+});
+function addBlob(g, sx, sz){
+  const b = new THREE.Mesh(BLOB_GEO, BLOB_MAT);
+  b.position.y = 0.04; b.scale.set(sx, 1, sz);
+  g.add(b);
 }
 const winTex = tex(64, 64, (g,w,h) => {
   g.fillStyle = '#8c8377'; g.fillRect(0,0,w,h);
@@ -1343,6 +1383,7 @@ function human(shirt, pants, skin, hair){
   const armR = addTo(g, GEO.arm, mS, 0.34, 1.6, 0); armR.name = 'armR';
   addTo(armL, GEO.hand, mK, 0, -0.68, 0);
   addTo(armR, GEO.hand, mK, 0, -0.68, 0);
+  addBlob(g, 0.5, 0.5);
   return g;
 }
 const HUMANS = [];
@@ -1638,6 +1679,7 @@ function car(color, type = 'sedan'){
   carSpot.position.set(0, 0.05, -4.5);
   g.add(carSpot);
   g.rotation.y = Math.PI; // arabalar +z yönünde gider: ön taraf (far, ayna, kaput) öne baksın
+  addBlob(g, 1.2, 2.6);
   return g;
 }
 const CAR_TPL = [
@@ -3152,7 +3194,9 @@ function updateSky(){
     lampPoolMat.opacity = litNow ? 0.3 : 0; // sokak lambalarının ışığı
     carSpotMat.opacity = litNow ? 0.22 : 0; // trafik arabalarının far ışığı
     scene.background = cfg.sky;
+    skyFx.visible = p === 'night';
   }
+  skyFx.position.copy(camera.position);
   // ışık ve sis anında değişmez, yavaşça kararır/aydınlanır
   if(!skyNow) skyNow = {hemi: hemi.intensity, sun: sun.intensity};
   const k = 0.003;
@@ -5075,7 +5119,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-003956';
+const APP_VERSION = '2026-10-21-004436';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
