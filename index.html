@@ -452,18 +452,22 @@ function load(){
     const r = localStorage.getItem(SAVE_KEY);
     if(r){
       const o = JSON.parse(r);
-      return Object.assign({}, DEF, o, {
-        stock: Object.assign({}, DEF.stock, o.stock || {}),
-        up: Object.assign({}, DEF.up, o.up || {}),
-        unlock: Object.assign({}, DEF.unlock, o.unlock || {}),
-        kar: Object.assign({}, DEF.kar, o.kar || {}),
-        settings: Object.assign({}, DEF.settings, o.settings || {})
-      });
+      // yeni sürümde eklenen alanlar eski kayıtta yoksa varsayılanla tamamlanır (iç içe nesneler dahil); kayıtlı değerler korunur
+      const out = JSON.parse(JSON.stringify(DEF));
+      for(const k in o){
+        const d = out[k], v = o[k];
+        if(d && typeof d === 'object' && !Array.isArray(d) && v && typeof v === 'object' && !Array.isArray(v)) out[k] = Object.assign(d, v);
+        else out[k] = v;
+      }
+      return out;
     }
   }catch(e){}
   return JSON.parse(JSON.stringify(DEF));
 }
 function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }catch(e){} }
+// sayfa yenilenir, kapanır ya da arka plana giderse ilerleme ve ayarlar kaybolmasın
+window.addEventListener('pagehide', () => save());
+document.addEventListener('visibilitychange', () => { if(document.hidden) save(); });
 const S = load();
 // eski kayıtlarda da her malzeme en az 30 olsun (bir kere uygulanır)
 if(!S.min30){
@@ -5174,7 +5178,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-004756';
+const APP_VERSION = '2026-10-21-004927';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
@@ -5184,7 +5188,7 @@ let updateShown = false, latestVersion = '';
   document.body.appendChild(tag);
 })();
 // önbelleği aşmak için adrese sürüm eklenir: tek dokunuşla her zaman en yeni sürüm gelir
-function reloadToLatest(){ location.replace(location.pathname + '?v=' + encodeURIComponent(latestVersion)); }
+function reloadToLatest(){ try{ save(); }catch(e){} location.replace(location.pathname + '?v=' + encodeURIComponent(latestVersion)); }
 function showUpdateBanner(){
   if(updateShown) return;
   updateShown = true;
