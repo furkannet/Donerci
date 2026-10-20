@@ -560,8 +560,9 @@ sun.target.position.set(2, 0, -12);
 scene.add(sun);
 scene.add(sun.target);
 
+let renderScale = 1; // uyarlanabilir çözünürlük: kare hızı düşerse otomatik azalır (0.5–1)
 function resize(){
-  const w = window.innerWidth, h = window.innerHeight;
+  const w = Math.max(1, Math.round(window.innerWidth * renderScale)), h = Math.max(1, Math.round(window.innerHeight * renderScale));
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.fov = (w / h) < 0.9 ? 72 : 60;
@@ -581,7 +582,8 @@ if (window.visualViewport) window.visualViewport.addEventListener('resize', resi
 
 /* ================= Geometri / malzeme (paylaşılan) ================= */
 // çift yüzlü: duvarların iç yüzü de görünsün (karavan ve ev içinden dışarı sızmasın)
-const M = c => new THREE.MeshLambertMaterial({color:c, side:THREE.DoubleSide});
+const MCACHE = {};
+const M = c => MCACHE[c] || (MCACHE[c] = new THREE.MeshLambertMaterial({color:c, side:THREE.DoubleSide})); // aynı renk tek malzemeyi paylaşır
 const B = (w,h,d) => new THREE.BoxGeometry(w,h,d);
 const GEO = {
   body: B(0.5,0.75,0.3),
@@ -4257,13 +4259,25 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
 
 let last = performance.now();
 let lastSec = -1;
-let fpsFrames = 0, fpsT0 = performance.now();
+// DOM yazımı yalnızca değer değişince yapılır (her karede yeniden yerleşim/boyama maliyetini önler)
+const _dc = {};
+function disp(id, v){ const k = id + '|d'; if(_dc[k] !== v){ _dc[k] = v; $(id).style.display = v; } }
+function txt(id, v){ const k = id + '|t'; if(_dc[k] !== v){ _dc[k] = v; $(id).textContent = v; } }
+function sty(id, prop, v){ const k = id + '|' + prop; if(_dc[k] !== v){ _dc[k] = v; $(id).style[prop] = v; } }
+let fpsFrames = 0, fpsT0 = performance.now(), fpsGood = 0;
 function frame(now){
   // FPS sayacı: her saniye güncellenir
   fpsFrames++;
   if(now - fpsT0 >= 1000){
-    $('fps').textContent = 'FPS ' + Math.round(fpsFrames * 1000 / (now - fpsT0));
+    const fpsNow = fpsFrames * 1000 / (now - fpsT0);
+    txt('fps', 'FPS ' + Math.round(fpsNow));
     fpsFrames = 0; fpsT0 = now;
+    // uyarlanabilir çözünürlük: yavaşsa küçült, uzun süre rahatsa yavaşça büyüt
+    if(!document.hidden && !escPaused){
+      if(fpsNow < 40 && renderScale > 0.5){ renderScale = Math.max(0.5, renderScale - 0.1); resize(); fpsGood = 0; }
+      else if(fpsNow >= 57){ if(++fpsGood >= 5 && renderScale < 1){ renderScale = Math.min(1, renderScale + 0.1); resize(); fpsGood = 0; } }
+      else fpsGood = 0;
+    }
   }
   requestAnimationFrame(frame); // hata olsa bile döngü devam etsin
   try{
@@ -4324,10 +4338,10 @@ function frame(now){
   stall.rotation.y = D.h;
   // car() modeli zaten π döndürülmüş; ön taraf hareket yönüne bakmalı
   if(ownedCarMesh){ ownedCarMesh.position.set(C.x, 0, C.z); ownedCarMesh.rotation.y = C.h + Math.PI + (C.slip || 0); }
-  $('hungerFill').style.width = hunger + '%';
-  $('hungerFill').style.background = hunger < 30 ? '#f87171' : '#ffb020';
+  sty('hungerFill', 'width', hunger + '%');
+  sty('hungerFill', 'background', hunger < 30 ? '#f87171' : '#ffb020');
   const nearCar = S.car && !C.driving && !D.driving && Math.hypot(P.x - C.x, P.z - C.z) < 4;
-  $('carBtn').style.display = nearCar ? 'block' : 'none';
+  disp('carBtn', nearCar ? 'block' : 'none');
   // arabanın üstünde "🚗 BİN (E)" etiketi
   const cl = $('carLabel');
   if(nearCar){
@@ -4336,8 +4350,8 @@ function frame(now){
     cl.style.left = ((v.x + 1) / 2 * window.innerWidth) + 'px';
     cl.style.top = ((-v.y + 1) / 2 * window.innerHeight) + 'px';
   } else cl.style.display = 'none';
-  $('carExit').style.display = C.driving && Math.abs(C.v) < 1 ? 'block' : 'none';
-  $('driftBtn').style.display = C.driving ? 'block' : 'none';
+  disp('carExit', C.driving && Math.abs(C.v) < 1 ? 'block' : 'none');
+  disp('driftBtn', C.driving ? 'block' : 'none');
   // farlar sürerken yanar; stop lambaları fren yapınca parlar
   if(C.beam) C.beam.intensity = (C.driving && C.beamOn) ? 4 : 0;
   if(C.beamSpot) C.beamSpot.visible = C.driving && C.beamOn;
@@ -4354,16 +4368,16 @@ function frame(now){
     C.sigR.forEach(m => m.visible = rOn);
     C.sigL.forEach(m => m.visible = lOn);
   }
-  $('camBtn').style.display = C.driving ? 'block' : 'none';
-  $('hornBtn').style.display = C.driving ? 'block' : 'none';
+  disp('camBtn', C.driving ? 'block' : 'none');
+  disp('hornBtn', C.driving ? 'block' : 'none');
   // benzin istasyonunun yanında, durmuş arabada benzin doldurma
   const atBenzin = C.driving && Math.hypot(C.x - BENZIN_X, C.z + 52) < 8 && Math.abs(C.v) < 1 && S.fuel < 100;
-  $('fuelBtn').style.display = atBenzin ? 'block' : 'none';
-  $('towBtn').style.display = C.driving && S.fuel <= 0 ? 'block' : 'none';
+  disp('fuelBtn', atBenzin ? 'block' : 'none');
+  disp('towBtn', C.driving && S.fuel <= 0 ? 'block' : 'none');
   // COMOGENE: yanındayken sür, sürerken park düğmesi
   const nearCom = S.mk.comogene && !C.driving && !D.driving && Math.hypot(P.x - CM.x, P.z - CM.z) < 5;
-  $('comoBtn').style.display = (nearCom || CM.driving) ? 'block' : 'none';
-  $('comoBtn').textContent = CM.driving ? '🅿 COMOGENE Park' : "🚚 COMOGENE'yi Sür";
+  disp('comoBtn', (nearCom || CM.driving) ? 'block' : 'none');
+  txt('comoBtn', CM.driving ? '🅿 COMOGENE Park' : "🚚 COMOGENE'yi Sür");
   // COMOGENE menüsü: yanına gelince kendi menüsü açılır
   const cmShow = S.mk.comogene && !C.driving && !D.driving && Math.hypot(P.x - CM.x, P.z - CM.z) < 5;
   if(cmShow !== comoMenuOpen){
@@ -4371,22 +4385,22 @@ function frame(now){
     [plate, comoPlate] = [comoPlate, plate]; // tabaklar değişir: COMOGENE'de kendi tabağın
     if(cmShow) renderComoMenu(); else buildIngButtons(); // menü sadece yer değişince kurulur
     renderAll(); // tabak alanı yeni yerin tabağını gösterir
-    $('comoMenu').style.display = cmShow ? 'block' : 'none';
+    disp('comoMenu', cmShow ? 'block' : 'none');
     if(cmShow) renderComoMenu();
   }
-  if(!cmShow) $('comoMenu').style.display = 'none'; // uzaktayken kesinlikle kapalı
+  if(!cmShow) disp('comoMenu', 'none'); // uzaktayken kesinlikle kapalı
   // COMOGENE yanındayken dönercinin malzeme menüsü gizlenir (COMOGENE menüsü geçerli)
-  $('comoMenu').style.display = 'none';
-  $('ings').style.display = '';
-  $('cut').style.display = cmShow ? 'none' : ''; // COMOGENE'de et kesilmez
-  if(atBenzin) $('fuelBtn').textContent = `⛽ Benzin Al (${Math.ceil((100 - S.fuel) * 0.7)}₺)`;
+  disp('comoMenu', 'none');
+  disp('ings', '');
+  disp('cut', cmShow ? 'none' : ''); // COMOGENE'de et kesilmez
+  if(atBenzin) txt('fuelBtn', `⛽ Benzin Al (${Math.ceil((100 - S.fuel) * 0.7)}₺)`);
   const nc = nearCounter(), nv = nearVendor();
   if(nc !== nearC || nv !== nearV){
     if(nc && !nearC) flash('Tezgâhtasın', '#4ade80');
     if(nv && !nearV) flash('Satıcı: Malzeme ve ekipman için dokun!', '#ffd54a');
     nearC = nc; nearV = nv;
     // menü yalnızca tezgâhın önünde açılır
-    $('bottom').style.display = nc ? '' : 'none';
+    disp('bottom', nc ? '' : 'none');
     renderAll();
   }
   updateSky();
@@ -4397,9 +4411,9 @@ function frame(now){
   updateHeldGun();
   drawClock();
   const hIn = inHouse(), hNear = nearHome() && !D.driving;
-  $('home').style.display = (hIn || hNear) && !D.driving ? 'block' : 'none';
-  $('home').textContent = hIn ? '🛏 Dinlen' : '🏠 Eve Git';
-  $('homeOut').style.display = hIn && !D.driving ? 'block' : 'none';
+  disp('home', (hIn || hNear) && !D.driving ? 'block' : 'none');
+  txt('home', hIn ? '🛏 Dinlen' : '🏠 Eve Git');
+  disp('homeOut', hIn && !D.driving ? 'block' : 'none');
   if(bubbleT > 0){
     bubbleT -= dt;
     placeBubble();
@@ -4412,7 +4426,7 @@ function frame(now){
   }
   const gdt = escPaused ? 0 : (tm.slowT > 0 ? dt * 0.4 : dt); // durdurulunca zaman donar
   tm.slowT -= dt;
-  $('timeFx').style.opacity = tm.slowT > 0 ? 1 : 0;
+  sty('timeFx', 'opacity', tm.slowT > 0 ? 1 : 0);
   step(gdt, active());
   renderer.render(scene, camera);
   }catch(e){
@@ -5061,7 +5075,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-003410';
+const APP_VERSION = '2026-10-21-003956';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
