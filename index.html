@@ -512,6 +512,16 @@ function resize(){
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
+// Telefon döndürülünce bazı tarayıcılar 'resize' olayını boyutlar güncellenmeden önce atar;
+// bu yüzden ek olaylara bağlanıp kısa gecikmelerle yeniden ölçüyoruz.
+function resizeSoon(){
+  resize();
+  setTimeout(resize, 120);
+  setTimeout(resize, 400);
+}
+window.addEventListener('orientationchange', resizeSoon);
+if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', resizeSoon);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 
 /* ================= Geometri / malzeme (paylaşılan) ================= */
 // çift yüzlü: duvarların iç yüzü de görünsün (karavan ve ev içinden dışarı sızmasın)
@@ -4994,7 +5004,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-000934';
+const APP_VERSION = '2026-10-21-001211';
 let updateShown = false, latestVersion = '';
 // önbelleği aşmak için adrese sürüm eklenir: tek dokunuşla her zaman en yeni sürüm gelir
 function reloadToLatest(){ location.replace(location.pathname + '?v=' + encodeURIComponent(latestVersion)); }
