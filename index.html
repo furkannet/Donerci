@@ -82,17 +82,80 @@ body.lefty #pad{left:auto!important;right:max(8px,env(safe-area-inset-right))!im
 #hornBtn{top:100px!important;bottom:auto!important;left:340px!important}
 #fuelBtn{top:146px!important;bottom:auto!important;left:340px!important}
 #towBtn{top:192px!important;bottom:auto!important;left:340px!important}
+
+/* ================= Kompakt arayüz (telefon öncelikli) ================= */
+#rightCol{position:fixed;top:max(6px,env(safe-area-inset-top));right:max(6px,env(safe-area-inset-right));z-index:3;width:min(150px,32vw);display:flex;flex-direction:column;gap:4px}
+#rightCol #board{position:static;width:100%;padding:5px 8px;font-size:10px;border-radius:10px}
+#board h4{font-size:9px;margin:0 0 2px}
+.pbar{height:4px;margin-top:4px}
+#future{margin-top:4px;padding-top:3px;font-size:9px}
+#toolbar{position:fixed;top:max(6px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:3;display:flex;flex-wrap:wrap;justify-content:center;gap:3px;max-width:calc(100vw - 350px)}
+#toolbar button{position:static!important;transform:none!important;margin:0!important;padding:5px 8px!important;font-size:12px!important;background:var(--panel);white-space:nowrap}
+#toolbar .t{display:none}
+@media (min-height:521px) and (min-width:900px){#toolbar .t{display:inline}}
+#stats{top:max(6px,env(safe-area-inset-top));left:max(6px,env(safe-area-inset-left));padding:5px 8px;font-size:11px;line-height:1.35;min-width:0;max-width:165px;border-radius:10px}
+#bottom{right:max(6px,env(safe-area-inset-right));bottom:max(6px,env(safe-area-inset-bottom));width:min(330px,calc(100% - 12px));padding:5px;border-radius:10px;max-height:50vh;overflow:auto}
+#plate{min-height:18px;gap:3px;margin-bottom:4px;font-size:10px}
+.chip{padding:2px 5px}
+.grid{grid-template-columns:repeat(4,1fr);gap:3px}
+button{padding:4px 3px;font-size:10px;border-radius:7px}
+button small{font-size:9px;margin-top:0}
+#serve{font-size:12px}
+.grid5{gap:3px}
+#clear{margin-top:4px!important;padding:3px!important;font-size:10px!important}
+#meter{height:16px;margin-bottom:5px}
+#pad{width:clamp(84px,24vh,116px);gap:4px}
+#pad #drive,#pad #shutter,#pad #run,#pad #home,#pad #homeOut,#pad #pay,#pad #carBtn,#pad #carExit{padding:5px 4px;font-size:11px}
+#driftBtn,#camBtn,#hornBtn,#fuelBtn,#towBtn,#comoBtn{padding:5px 8px!important;font-size:11px!important}
+#driftBtn{top:8px!important;left:190px!important}
+#camBtn{top:38px!important;left:190px!important}
+#hornBtn{top:8px!important;left:280px!important}
+#fuelBtn{top:38px!important;left:280px!important}
+#towBtn{top:68px!important;left:280px!important}
+.card{padding:12px}
+.card h2{font-size:17px}
+.card p{font-size:13px}
+.row{padding:5px 0;font-size:13px}
+.wide{margin-top:10px;padding:9px;font-size:13px}
+@media (max-height:520px){
+  .card{max-height:96vh;padding:10px}
+  .card h2{font-size:15px;margin-bottom:3px}
+  .card h3{margin:8px 0 3px}
+  .row{padding:4px 0}
+  .set-row{padding:6px 0}
+  .wide{margin-top:6px;padding:7px;font-size:12px}
+}
+#fps{right:auto!important;left:calc(50% - 90px)!important;top:auto!important;bottom:max(3px,env(safe-area-inset-bottom))!important;font-size:10px!important;padding:1px 4px!important}
+@media (max-height:340px){#stats{font-size:10px;line-height:1.2}#pad{width:clamp(70px,22vh,100px)}}
+@media (max-height:520px){#bottom{max-height:62vh}}
+@media (max-aspect-ratio:1/1){
+  #toolbar{top:max(174px,calc(env(safe-area-inset-top) + 166px));max-width:calc(100vw - 12px)}
+  #terror{top:max(236px,calc(env(safe-area-inset-top) + 228px))!important}
+  #pad{bottom:calc(max(8px,env(safe-area-inset-bottom)) + 215px)}
+}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 
 <div id="stats" class="panel"></div>
+<div id="rightCol">
 <div id="board" class="panel">
   <h4>Sıradaki Müşteri</h4>
   <div id="boardBody"></div>
   <div class="pbar"><i id="pat"></i></div>
   <div id="future"></div>
+</div>
+</div>
+<div id="toolbar">
+  <button id="setBtn" title="Ayarlar">⚙</button>
+  <button id="fsBtn" title="Tam Ekran">⛶<span class="t"> Tam Ekran</span></button>
+  <button id="endDay" title="Günü Bitir">🌙<span class="t"> Günü Bitir</span></button>
+  <button id="charBtn" title="Karakter">🧑<span class="t"> Karakter</span></button>
+  <button id="nightBtn" title="Gece">🌙<span class="t"> Gece</span></button>
+  <button id="codeBtn" title="Kod">🎟<span class="t"> Kod</span></button>
+  <button id="invBtn" title="Envanter">🎒<span class="t"> Envanter</span></button>
+  <button id="tablet" style="display:none" title="Tablet">📱<span class="t"> Tablet</span></button>
 </div>
 
 <div id="bottom" class="panel" style="display:none">
@@ -122,11 +185,6 @@ body.lefty #pad{left:auto!important;right:max(8px,env(safe-area-inset-right))!im
 </div>
 <button id="driftBtn" style="display:none;position:fixed;left:150px;bottom:706px;z-index:3;padding:12px 14px;background:#4a3a1e;font-weight:700;font-size:15px">🌀 Drift: Açık</button>
 <button id="hornBtn" style="display:none;position:fixed;left:290px;bottom:706px;z-index:3;padding:12px 14px;background:#5a1e1e;font-weight:700;font-size:15px">📯 Korna (H)</button>
-<button id="invBtn" style="position:fixed;top:230px;right:12px;z-index:3;padding:6px 12px;background:var(--panel)">🎒 Envanter</button>
-<button id="codeBtn" style="position:fixed;top:190px;right:12px;z-index:3;padding:6px 12px;background:var(--panel)">🎟 Kod</button>
-<button id="nightBtn" style="position:fixed;top:150px;left:50%;transform:translateX(-50%);z-index:3;padding:6px 12px;background:var(--panel)">🌙 Gece</button>
-<button id="fsBtn" style="position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:3;padding:6px 12px;background:var(--panel)">⛶ Tam Ekran</button>
-<button id="charBtn" style="position:fixed;top:110px;left:50%;transform:translateX(-50%);z-index:3;padding:6px 12px;background:var(--panel)">🧑 Karakter</button>
 <div id="char" class="modal">
   <div class="card">
     <h2>Karakterin</h2>
@@ -140,7 +198,6 @@ body.lefty #pad{left:auto!important;right:max(8px,env(safe-area-inset-right))!im
 <button id="comoBtn" style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:762px;z-index:3;padding:12px 14px;background:#1e4a2a;font-weight:700;font-size:15px">🚚 COMOGENE'yi Sür</button>
 <button id="camBtn" style="display:none;position:fixed;left:150px;bottom:762px;z-index:3;padding:12px 14px;background:#2a3a5a;font-weight:700;font-size:15px">🎥 Yakın</button>
 <div id="carLabel" style="display:none;position:fixed;transform:translate(-50%,-100%);background:#1e4a3a;color:#fff;padding:6px 10px;border-radius:10px;font-weight:700;font-size:15px;pointer-events:none;z-index:6">🚗 BİN (E)</div>
-<button id="tablet" style="display:none;position:fixed;right:10px;top:300px;z-index:3;padding:10px 12px;background:#2a3a5a;font-weight:600">📱 Tablet</button>
 <div id="lvl" class="modal">
   <div class="card">
     <h2>Seviye</h2>
@@ -228,8 +285,6 @@ body.lefty #pad{left:auto!important;right:max(8px,env(safe-area-inset-right))!im
     <button id="mktClose" class="wide">Kapat</button>
   </div>
 </div>
-<button id="setBtn" class="gear">⚙</button>
-<button id="endDay" class="gear" style="top:56px">🌙 Günü Bitir</button>
 <div id="set" class="modal">
   <div class="card">
     <h2>Kontroller</h2>
@@ -2303,7 +2358,7 @@ $('nightBtn').onclick = () => {
   nightMode = !nightMode;
   skyPeriod = '';
   updateSky();
-  $('nightBtn').textContent = nightMode ? '☀ Gündüz' : '🌙 Gece';
+  $('nightBtn').innerHTML = nightMode ? '☀<span class="t"> Gündüz</span>' : '🌙<span class="t"> Gece</span>';
 };
 $('charBtn').onclick = () => { setOpen = true; $('char').style.display = 'flex'; renderChar(); };
 $('charClose').onclick = () => { setOpen = false; $('char').style.display = 'none'; renderAll(); };
@@ -4842,7 +4897,8 @@ let terrorWaveT = 0;
 let terrorWarned = false;
 // geri sayım: gelmeden önce ekranda görünür
 const terrorLabel = document.createElement('div');
-terrorLabel.style.cssText = 'position:fixed;top:270px;right:12px;z-index:3;color:#ff6b6b;font-weight:700;font-size:13px;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:6px;pointer-events:none';
+terrorLabel.style.cssText = 'position:fixed;top:max(40px,calc(env(safe-area-inset-top) + 36px));left:50%;transform:translateX(-50%);z-index:3;color:#ff6b6b;font-weight:700;font-size:11px;white-space:nowrap;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:6px;pointer-events:none';
+terrorLabel.id = 'terror';
 document.body.appendChild(terrorLabel);
 function terroristUpdate(){
   const now = performance.now();
@@ -5005,13 +5061,13 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-002326';
+const APP_VERSION = '2026-10-21-003312';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
   const tag = document.createElement('div');
   tag.textContent = 'v' + APP_VERSION;
-  tag.style.cssText = 'position:fixed;left:6px;bottom:max(4px,env(safe-area-inset-bottom));z-index:5;font-size:10px;color:rgba(255,255,255,.55);pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.8)';
+  tag.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:max(3px,env(safe-area-inset-bottom));z-index:5;font-size:10px;color:rgba(255,255,255,.55);pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.8)';
   document.body.appendChild(tag);
 })();
 // önbelleği aşmak için adrese sürüm eklenir: tek dokunuşla her zaman en yeni sürüm gelir
@@ -5064,7 +5120,7 @@ setTimeout(() => checkUpdate(true), 800);
   const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
   const standalone = window.matchMedia('(display-mode: fullscreen)').matches || window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   if(standalone){ btn.style.display = 'none'; return; } // ana ekrandan açılan uygulama zaten tam ekran
-  function refresh(){ btn.textContent = isFs() ? '🡼 Tam Ekrandan Çık' : '⛶ Tam Ekran'; setTimeout(resize, 150); }
+  function refresh(){ btn.innerHTML = isFs() ? '🡼<span class="t"> Çık</span>' : '⛶<span class="t"> Tam Ekran</span>'; btn.title = isFs() ? 'Tam ekrandan çık' : 'Tam ekran'; setTimeout(resize, 150); }
   btn.onclick = async () => {
     try{
       if(isFs()){
