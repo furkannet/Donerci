@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/amasia/doner-simulator/.claude/auto-publish.sh",
+            "timeout": 120,
+            "statusMessage": "GitHub'a yükleniyor..."
+          }
+        ]
+      }
+    ]
+  }
+}
