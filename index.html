@@ -5004,7 +5004,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-001432';
+const APP_VERSION = '2026-10-21-001707';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
@@ -5040,11 +5040,16 @@ async function checkUpdate(first){
     if(v && v !== APP_VERSION){
       latestVersion = v;
       // oyun yeni açıldıysa uyarı beklemeden kendiliğinden yeniler (bir kez; sonsuz döngüyü önler)
-      if(first === true && !location.search.includes('v=' + encodeURIComponent(v))) reloadToLatest();
+      // her sürüm için tek deneme (sessionStorage): sunucu henüz eski dosyayı veriyorsa sonsuz döngüye girmez
+      let tried = false;
+      try{ tried = sessionStorage.getItem('upd_tried') === v; if(first === true && !tried) sessionStorage.setItem('upd_tried', v); }catch(e){}
+      if(first === true && !tried) reloadToLatest();
       else showUpdateBanner();
     }
   }catch(e){} // çevrimdışıysa sessizce geç
 }
+// adres çubuğundaki ?v=... yalnızca önbellek kırıcıydı; çalışan sürümü yanıltmasın diye temizle
+if(location.search.includes('v=')) { try{ history.replaceState(null, '', location.pathname); }catch(e){} }
 setInterval(checkUpdate, 60 * 1000);
 document.addEventListener('visibilitychange', () => { if(!document.hidden) checkUpdate(); });
 setTimeout(() => checkUpdate(true), 800);
