@@ -1918,6 +1918,18 @@ function spawnCar(){
   cars.push({g:c, speed:12 + Math.random()*6, snd: makeCarSound(), fuelStop: Math.random() < 0.25, stopT: 0, stopped: false, laneX: -2.0});
 }
 
+// yayılar kaldırımdan çıkmaz ve engellerden kaçar: ileri adım yoksa yan kaymaya bakar, uzun süre takılırsa çekilir
+function sideClamp(x){ return x < 0 ? Math.max(-8.8, Math.min(-4.4, x)) : Math.max(4.4, Math.min(10.4, x)); }
+function tryWalk(o, dz){
+  const nz = o.z + dz;
+  for(const dx of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2]){
+    const nx = sideClamp(o.x + dx);
+    if(free(nx, nz)){ o.x = nx; o.z = nz; o.stuck = 0; return true; }
+  }
+  o.stuck = (o.stuck || 0) + dz;
+  return false;
+}
+
 function spawnPasser(){
   const g = pick(HUMANS).clone();
   g.position.set(-4.5, 0, -91);
@@ -4052,7 +4064,7 @@ function step(dt, play){
   crossers.forEach(cr => {
     // geçitte yol karşısına yürür; karşıya varınca kaldırımda yürümeye devam eder
     if(cr.state === 'cross'){ cr.x += cr.speed * dt; cr.g.position.x = cr.x; }
-    else { cr.z += cr.dirZ * 1.6 * dt; cr.g.position.z = cr.z; }
+    else { tryWalk(cr, cr.dirZ * 1.6 * dt); cr.g.position.set(cr.x, 0, cr.z); }
     cr.ph += dt * 6;
     cr.legL.rotation.x = Math.sin(cr.ph) * 0.6;
     cr.legR.rotation.x = -Math.sin(cr.ph) * 0.6;
@@ -4072,12 +4084,13 @@ function step(dt, play){
   });
 
   passers.forEach(p => {
-    p.z += p.speed * dt; p.ph += dt * 6;
+    p.ph += dt * 6;
+    tryWalk(p, p.speed * dt); // takılınca yerinde bekler, tryWalk takılma mesafesini sayar
     p.legL.rotation.x = Math.sin(p.ph) * 0.6; p.legR.rotation.x = -Math.sin(p.ph) * 0.6;
-    p.g.position.z = p.z;
+    p.g.position.set(p.x, 0, p.z);
   });
   passers = passers.filter(p => {
-    if(p.z > 8){ scene.remove(p.g); return false; }
+    if(p.z > 8 || (p.stuck || 0) > 4){ scene.remove(p.g); return false; }
     return true;
   });
 
@@ -5178,7 +5191,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-005447';
+const APP_VERSION = '2026-10-21-005657';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
