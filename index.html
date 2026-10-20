@@ -125,6 +125,7 @@ body.lefty #pad{left:auto!important;right:max(8px,env(safe-area-inset-right))!im
 <button id="invBtn" style="position:fixed;top:230px;right:12px;z-index:3;padding:6px 12px;background:var(--panel)">🎒 Envanter</button>
 <button id="codeBtn" style="position:fixed;top:190px;right:12px;z-index:3;padding:6px 12px;background:var(--panel)">🎟 Kod</button>
 <button id="nightBtn" style="position:fixed;top:150px;left:50%;transform:translateX(-50%);z-index:3;padding:6px 12px;background:var(--panel)">🌙 Gece</button>
+<button id="fsBtn" style="position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:3;padding:6px 12px;background:var(--panel)">⛶ Tam Ekran</button>
 <button id="charBtn" style="position:fixed;top:110px;left:50%;transform:translateX(-50%);z-index:3;padding:6px 12px;background:var(--panel)">🧑 Karakter</button>
 <div id="char" class="modal">
   <div class="card">
@@ -5004,7 +5005,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-001707';
+const APP_VERSION = '2026-10-21-001857';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
@@ -5053,6 +5054,35 @@ if(location.search.includes('v=')) { try{ history.replaceState(null, '', locatio
 setInterval(checkUpdate, 60 * 1000);
 document.addEventListener('visibilitychange', () => { if(!document.hidden) checkUpdate(); });
 setTimeout(() => checkUpdate(true), 800);
+
+/* ================= Tam ekran ================= */
+(function(){
+  const btn = document.getElementById('fsBtn');
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const standalone = window.matchMedia('(display-mode: fullscreen)').matches || window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if(standalone){ btn.style.display = 'none'; return; } // ana ekrandan açılan uygulama zaten tam ekran
+  function refresh(){ btn.textContent = isFs() ? '🡼 Tam Ekrandan Çık' : '⛶ Tam Ekran'; setTimeout(resize, 150); }
+  btn.onclick = async () => {
+    try{
+      if(isFs()){
+        await exit.call(document);
+        if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+      }else if(req){
+        await req.call(el);
+        // destekleyen tarayıcılarda yatay konuma kilitle
+        try{ if(screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); }catch(e){}
+      }else{
+        alert('Bu tarayıcı tam ekranı desteklemiyor.\nTarayıcı menüsünden "Ana ekrana ekle" ile ekleyip oradan açarsan tam ekran çalışır.');
+      }
+    }catch(e){}
+    refresh();
+  };
+  document.addEventListener('fullscreenchange', refresh);
+  document.addEventListener('webkitfullscreenchange', refresh);
+})();
 
 startShift();
 // profil kayıtlıysa tekrar sorulmaz; yoksa önce kayıt/giriş
