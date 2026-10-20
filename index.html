@@ -1414,6 +1414,9 @@ const SKINS = ['#f1c27d','#c68642','#8d5524','#ffdbac'];
 const HAIRS = ['#1b1b1b','#4a2c17','#c9a227'];
 
 const SHOE_M = M(0x1e1e1e), EYE_M = M(0x111111);
+// yürürken ayak yerde kalsın: bacak kalçadan döner, kalça da açının kosinüsüyle alçalır (yoksa ayaklar havalanır)
+function legPose(leg, a){ leg.rotation.x = a; leg.position.y = 0.85 * Math.cos(a); }
+const SHOE_Y = 0.85;
 function human(shirt, pants, skin, hair){
   const g = new THREE.Group();
   const mS = M(shirt), mP = M(pants), mK = M(skin), mH = M(hair);
@@ -4066,8 +4069,8 @@ function step(dt, play){
     if(cr.state === 'cross'){ cr.x += cr.speed * dt; cr.g.position.x = cr.x; }
     else { tryWalk(cr, cr.dirZ * 1.6 * dt); cr.g.position.set(cr.x, 0, cr.z); }
     cr.ph += dt * 6;
-    cr.legL.rotation.x = Math.sin(cr.ph) * 0.6;
-    cr.legR.rotation.x = -Math.sin(cr.ph) * 0.6;
+    legPose(cr.legL, Math.sin(cr.ph) * 0.6);
+    legPose(cr.legR, -Math.sin(cr.ph) * 0.6);
   });
   crossers = crossers.filter(cr => {
     if(cr.state === 'cross' && (cr.x < -4.6 || cr.x > 6.6)){
@@ -4086,7 +4089,7 @@ function step(dt, play){
   passers.forEach(p => {
     p.ph += dt * 6;
     tryWalk(p, p.speed * dt); // takılınca yerinde bekler, tryWalk takılma mesafesini sayar
-    p.legL.rotation.x = Math.sin(p.ph) * 0.6; p.legR.rotation.x = -Math.sin(p.ph) * 0.6;
+    legPose(p.legL, Math.sin(p.ph) * 0.6); legPose(p.legR, -Math.sin(p.ph) * 0.6);
     p.g.position.set(p.x, 0, p.z);
   });
   passers = passers.filter(p => {
@@ -4139,7 +4142,7 @@ comoWalkers.forEach(w => {
   const walking = w.state === 'in' || w.state === 'out';
   w.ph += dt * 7;
   const sw = walking ? Math.sin(w.ph) * 0.6 : 0;
-  w.legL.rotation.x = sw; w.legR.rotation.x = -sw;
+  legPose(w.legL, sw); legPose(w.legR, -sw);
   w.armL.rotation.x = -sw * 0.7; w.armR.rotation.x = sw * 0.7;
   w.g.position.z = w.z;
 });
@@ -4233,7 +4236,7 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
     if(thief){
       t.ph += dt * 7;
       const swing = walking ? Math.sin(t.ph) * 0.6 : 0;
-      t.legL.rotation.x = swing; t.legR.rotation.x = -swing;
+      legPose(t.legL, swing); legPose(t.legR, -swing);
       t.armL.rotation.x = -swing * 0.7; t.armR.rotation.x = swing * 0.7;
       t.g.position.set(t.x, 0, t.z);
     }
@@ -4276,7 +4279,7 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
     }
     t.ph += dt * (walking ? 7 : 2);
     const swing = walking ? Math.sin(t.ph) * 0.6 : 0;
-    t.legL.rotation.x = swing; t.legR.rotation.x = -swing;
+    legPose(t.legL, swing); legPose(t.legR, -swing);
     t.armL.rotation.x = -swing * 0.7; t.armR.rotation.x = swing * 0.7;
     t.g.position.set(t.x, 0, t.z);
     if(t.state === 'leave' && t.z > 8){ scene.remove(t.g); taxman = null; }
@@ -4320,7 +4323,7 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
     }
     c.ph += dt * (c.walk ? 7 : 2);
     const swing = c.walk ? Math.sin(c.ph) * 0.6 : 0;
-    c.legL.rotation.x = swing; c.legR.rotation.x = -swing;
+    legPose(c.legL, swing); legPose(c.legR, -swing);
     c.armL.rotation.x = -swing * 0.7; c.armR.rotation.x = swing * 0.7;
     c.g.position.set(c.x, c.walk ? Math.abs(Math.sin(c.ph)) * 0.05 : 0, c.z);
     if(c.child){ c.child.position.set(c.x - 0.7, 0, c.z + 0.3); c.child.visible = c.g.visible; }
@@ -4438,7 +4441,7 @@ function frame(now){
     const pMoving = pSpeed > 0.3;
     if(pMoving) pPh += dt * 7;
     const pSw = pMoving ? Math.sin(pPh) * 0.6 : 0;
-    pLegL.rotation.x = pSw; pLegR.rotation.x = -pSw;
+    legPose(pLegL, pSw); legPose(pLegR, -pSw);
     pArmL.rotation.x = -pSw * 0.7; pArmR.rotation.x = pSw * 0.7;
     if(kick){
       // fırlarken yükselir ve döner
@@ -5061,8 +5064,8 @@ function terroristUpdate(){
     t.g.rotation.y = Math.atan2(dx, dz);
     // adım atma: bacaklar ve sol kol sallanır
     t.ph += dt * 8;
-    t.g.getObjectByName('legL').rotation.x = Math.sin(t.ph) * 0.6;
-    t.g.getObjectByName('legR').rotation.x = -Math.sin(t.ph) * 0.6;
+    legPose(t.g.getObjectByName('legL'), Math.sin(t.ph) * 0.6);
+    legPose(t.g.getObjectByName('legR'), -Math.sin(t.ph) * 0.6);
     t.g.getObjectByName('armL').rotation.x = -Math.sin(t.ph) * 0.4;
   }
   // her 40 saniyede 10 terörist yola çıkar (en fazla 10 canlı)
@@ -5191,7 +5194,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-005657';
+const APP_VERSION = '2026-10-21-005829';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
