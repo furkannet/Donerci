@@ -5178,13 +5178,13 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-004927';
+const APP_VERSION = '2026-10-21-005030';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
   const tag = document.createElement('div');
   tag.textContent = 'v' + APP_VERSION;
-  tag.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:max(3px,env(safe-area-inset-bottom));z-index:5;font-size:10px;color:rgba(255,255,255,.55);pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.8)';
+  tag.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:max(3px,env(safe-area-inset-bottom));z-index:5;font-size:11px;font-weight:700;color:rgba(255,255,255,.9);pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.95)';
   document.body.appendChild(tag);
 })();
 // önbelleği aşmak için adrese sürüm eklenir: tek dokunuşla her zaman en yeni sürüm gelir
