@@ -1386,6 +1386,17 @@ function human(shirt, pants, skin, hair){
   addBlob(g, 0.5, 0.5);
   return g;
 }
+// kovboy şapkası: ortak geometri ve malzemeler (klonlar da paylaşır), toplam 2 küçük nesne
+const HAT_BRIM = new THREE.CylinderGeometry(0.36, 0.36, 0.025, 12);
+const HAT_CROWN = new THREE.CylinderGeometry(0.15, 0.2, 0.2, 10);
+const HAT_BAND = new THREE.CylinderGeometry(0.205, 0.205, 0.045, 10);
+const HAT_COLORS = [0x6b4a2b, 0x3b2a1a, 0x8a6a3d];
+function cowboyHat(g, col){
+  const m = M(col || pick(HAT_COLORS));
+  addTo(g, HAT_BRIM, m, 0, 2.1, 0);
+  addTo(g, HAT_CROWN, m, 0, 2.2, 0);
+  addTo(g, HAT_BAND, M(0x1f1a16), 0, 2.13, 0);
+}
 const HUMANS = [];
 // değişik giyim tarzları: sade, ceketli, etekli, şapkalı
 for(let i = 0; i < 10; i++){
@@ -1393,7 +1404,7 @@ for(let i = 0; i < 10; i++){
   const style = i % 4;
   if(style === 1) addTo(h, B(0.56, 0.8, 0.36), M(pick(SHIRTS)), 0, 1.25, 0); // ceket
   if(style === 2) addTo(h, B(0.56, 0.45, 0.36), M(pick(PANTS)), 0, 0.8, 0);  // etek
-  if(style === 3) addTo(h, new THREE.CylinderGeometry(0.22, 0.22, 0.1, 10), M(pick(SHIRTS)), 0, 2.0, 0); // şapka
+  if(style === 3 || i === 5) cowboyHat(h); // kovboy şapkası
   HUMANS.push(h);
 }
 
@@ -5119,7 +5130,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-004436';
+const APP_VERSION = '2026-10-21-004622';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
