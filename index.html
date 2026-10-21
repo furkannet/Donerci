@@ -95,6 +95,7 @@ body.lefty #pad{left:auto!important;right:max(8px,env(safe-area-inset-right))!im
 #toolbar #shutter{background:#2d3a2a}
 #toolbar #run{background:#3d2e1e}
 #toolbar #home,#toolbar #homeOut{background:#2d4a3e}
+#toolbar #wheelBtn{background:#6b21a8}
 #toolbar .t{display:none}
 @media (min-height:521px) and (min-width:900px){#toolbar .t{display:inline}}
 #stats{top:max(6px,env(safe-area-inset-top));left:max(6px,env(safe-area-inset-left));padding:5px 8px;font-size:11px;line-height:1.35;min-width:0;max-width:165px;border-radius:10px}
@@ -167,6 +168,7 @@ button small{font-size:9px;margin-top:0}
   <button id="run">🏃 Koş</button>
   <button id="home" style="display:none">🏠 Eve Git</button>
   <button id="homeOut" style="display:none">🚪 Dışarı</button>
+  <button id="wheelBtn" style="display:none">🎡 Çark (100₺)</button>
 </div>
 
 <div id="bottom" class="panel" style="display:none">
@@ -2780,6 +2782,7 @@ function startShift(){
   hunger = 100; starveT = 20;
   if(thief){ scene.remove(thief.g); thief = null; }
   beggarGave = false;
+  wheelSpinsLeft = 3;
   thiefT = 60 + Math.random() * 60;
   // çalışan maaşı birikir; her vardiya 20₺ eklenir, ödemen gerekir
   staffT = 5;
@@ -3115,7 +3118,8 @@ canvas.addEventListener('pointerup', e => {
   ray.setFromCamera(ptr, camera);
   // saate dokunmak = saati söyle
   if(ray.intersectObject(clockMesh, false).length){ sayTime(); return; }
-  // terörist: silah kuşanıksa vur, silahcı: dükkânı aç
+  // terörist: silah kuşanıksa vur, silahcı: dükkânı aç, çark: çevir
+  if(ray.intersectObject(wheelGroup, true).length){ spinWheel(); return; }
   const tHit = terrorists.find(t => !t.dead && ray.intersectObject(t.g, true).length);
   if(tHit){ shootTerrorist(tHit); return; }
   if(ray.intersectObject(gunDealer, true).length){ openArmShop(); return; }
@@ -4532,7 +4536,11 @@ function frame(now){
   lightningUpdate();
   rainSoundUpdate();
   updateHeldGun();
+  wheelUpdate(dt);
   drawClock();
+  const nearWheel = !C.driving && !D.driving && !CM.driving && Math.hypot(P.x - WHEEL_POS.x, P.z - WHEEL_POS.z) < 5.5;
+  disp('wheelBtn', nearWheel ? 'block' : 'none');
+  if(nearWheel) txt('wheelBtn', `🎡 Çark (100₺ · ${wheelSpinsLeft}/3)`);
   const hIn = inHouse(), hNear = nearHome() && !D.driving;
   disp('home', (hIn || hNear) && !D.driving ? 'block' : 'none');
   txt('home', hIn ? '🛏 Dinlen' : '🏠 Eve Git');
@@ -4654,6 +4662,138 @@ const comoPotMat = M(0xb85d38), comoLeafMat = M(0x2f8f46);
     comoTruck.add(bl);
   });
 });
+
+// COMOGENE'nin yanında Şans Çarkı (her vardiyada 3 hak, bilet 100₺)
+const WHEEL_POS = {x: 8.8, z: -16.5};
+const WHEEL_COST = 100;
+const WHEEL_SLICES = [
+  {label: '0₺',    prize: 0,    col: '#374151'},
+  {label: '50₺',   prize: 50,   col: '#2563eb'},
+  {label: '150₺',  prize: 150,  col: '#16a34a'},
+  {label: '300₺',  prize: 300,  col: '#d97706'},
+  {label: '50₺',   prize: 50,   col: '#7c3aed'},
+  {label: '500₺',  prize: 500,  col: '#dc2626'},
+  {label: '100₺',  prize: 100,  col: '#0891b2'},
+  {label: '1000₺', prize: 1000, col: '#eab308'}
+];
+let wheelSpinsLeft = 3, wheelSpinning = false, wheelAngle = 0, wheelVel = 0, wheelTargetIdx = 0, wheelLastTick = 0;
+const wheelGroup = new THREE.Group();
+wheelGroup.position.set(WHEEL_POS.x, 0, WHEEL_POS.z);
+wheelGroup.rotation.y = -Math.PI / 2; // yola bakar
+scene.add(wheelGroup);
+const wheelBase = new THREE.Mesh(B(1.1, 0.14, 0.9), M(0x2a2e35));
+wheelBase.position.set(0, 0.07, 0);
+wheelGroup.add(wheelBase);
+const wheelPost = new THREE.Mesh(B(0.18, 2.3, 0.18), M(0x4b5563));
+wheelPost.position.set(0, 1.15, -0.12);
+wheelGroup.add(wheelPost);
+const wheelFaceTex = tex(256, 256, (g, w, h) => {
+  const cx = w / 2, cy = h / 2, r = w / 2 - 6;
+  const n = WHEEL_SLICES.length, stepA = (Math.PI * 2) / n;
+  for(let i = 0; i < n; i++){
+    const a0 = i * stepA - Math.PI / 2 - stepA / 2;
+    const a1 = a0 + stepA;
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.arc(cx, cy, r, a0, a1);
+    g.closePath();
+    g.fillStyle = WHEEL_SLICES[i].col;
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = '#fff8dc';
+    g.stroke();
+    g.save();
+    g.translate(cx, cy);
+    g.rotate((a0 + a1) / 2);
+    g.fillStyle = '#ffffff';
+    g.font = 'bold 22px sans-serif';
+    g.textAlign = 'right';
+    g.textBaseline = 'middle';
+    g.fillText(WHEEL_SLICES[i].label, r - 14, 0);
+    g.restore();
+  }
+  g.lineWidth = 6;
+  g.strokeStyle = '#fbbf24';
+  g.beginPath();
+  g.arc(cx, cy, r, 0, Math.PI * 2);
+  g.stroke();
+});
+const wheelPivot = new THREE.Group();
+wheelPivot.position.set(0, 1.75, 0.04);
+wheelGroup.add(wheelPivot);
+const wheelRim = new THREE.Mesh(new THREE.CylinderGeometry(1.06, 1.06, 0.1, 16).rotateX(Math.PI / 2), M(0xd97706));
+wheelPivot.add(wheelRim);
+const wheelFace = new THREE.Mesh(new THREE.CircleGeometry(1.02, 16), new THREE.MeshBasicMaterial({map: wheelFaceTex}));
+wheelFace.position.z = 0.055;
+wheelPivot.add(wheelFace);
+const wheelHub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.16, 10).rotateX(Math.PI / 2), M(0xfbbf24));
+wheelHub.position.z = 0.03;
+wheelPivot.add(wheelHub);
+const wheelPtr = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.28, 6), M(0xef4444));
+wheelPtr.rotation.z = Math.PI;
+wheelPtr.position.set(0, 2.84, 0.1);
+wheelGroup.add(wheelPtr);
+const wheelSignTex = tex(256, 80, (g, w, h) => {
+  g.fillStyle = '#581c87'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#fbbf24'; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
+  g.fillStyle = '#fef08a'; g.font = 'bold 28px sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('ŞANS ÇARKI · 100₺', w / 2, h / 2 + 2);
+});
+const wheelSign = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.55), new THREE.MeshBasicMaterial({map: wheelSignTex, side: THREE.DoubleSide}));
+wheelSign.position.set(0, 3.28, 0);
+wheelGroup.add(wheelSign);
+
+function spinWheel(){
+  if(Math.hypot(P.x - WHEEL_POS.x, P.z - WHEEL_POS.z) > 6){ flash('Çarka biraz yaklaş', '#f87171'); return; }
+  if(wheelSpinning){ flash('Çark dönüyor, bekle!', '#ffd54a'); return; }
+  if(wheelSpinsLeft <= 0){ flash('Bu vardiyada 3 hakkını kullandın!', '#f87171'); return; }
+  if(S.money < WHEEL_COST){ flash('Çark bileti 100₺', '#f87171'); return; }
+  S.money -= WHEEL_COST;
+  wheelSpinsLeft--;
+  wheelTargetIdx = (Math.random() * WHEEL_SLICES.length) | 0;
+  const stepA = (Math.PI * 2) / WHEEL_SLICES.length;
+  const targetMod = (wheelTargetIdx * stepA) % (Math.PI * 2);
+  const curMod = ((wheelAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  let delta = targetMod - curMod;
+  if(delta < 0) delta += Math.PI * 2;
+  wheelSpinning = true;
+  wheelTargetAngle = wheelAngle + Math.PI * 2 * 5 + delta;
+  wheelVel = 14;
+  beep(520, 0.08);
+  save();
+  renderAll();
+}
+let wheelTargetAngle = 0;
+function wheelUpdate(dt){
+  if(!wheelSpinning) return;
+  const rem = wheelTargetAngle - wheelAngle;
+  const speed = Math.max(1.2, Math.min(14, rem * 2.2));
+  wheelAngle += speed * dt;
+  const stepA = (Math.PI * 2) / WHEEL_SLICES.length;
+  const tickIdx = Math.floor(wheelAngle / stepA);
+  if(tickIdx !== wheelLastTick){
+    wheelLastTick = tickIdx;
+    beep(680, 0.03);
+  }
+  if(wheelAngle >= wheelTargetAngle){
+    wheelAngle = wheelTargetAngle;
+    wheelSpinning = false;
+    const win = WHEEL_SLICES[wheelTargetIdx];
+    if(win.prize > 0){
+      S.money += win.prize;
+      beep(880, 0.18);
+      flash(`🎡 Çarktan +${win.prize}₺ çıktı! (Kalan hak: ${wheelSpinsLeft}/3)`, '#4ade80');
+    } else {
+      beep(240, 0.18, 'sawtooth');
+      flash(`🎡 Boş çıktı! (Kalan hak: ${wheelSpinsLeft}/3)`, '#f87171');
+    }
+    save();
+    renderAll();
+  }
+  wheelPivot.rotation.z = wheelAngle;
+}
+$('wheelBtn').onclick = spinWheel;
 resize();
 applySettings();
 drawPC();
@@ -5009,20 +5149,27 @@ function shootTerrorist(t){
   save();
   renderAll();
 }
-// mermi izi: duvara, yere ya da bir nesneye çarpan yerde koyu bir delik; 20 sn sonra kaybolur
+// mermi izi: duvara, yere ya da bir nesneye çarpan yerde koyu bir delik ve çatlak izi; 60 sn sonra kaybolur
+const HOLE_OUTER_GEO = new THREE.CircleGeometry(0.15, 10);
+const HOLE_INNER_GEO = new THREE.CircleGeometry(0.08, 10);
+const HOLE_CRACK_GEO = B(0.32, 0.022, 0.006);
+const HOLE_OUTER_MAT = new THREE.MeshBasicMaterial({color: 0x3b332c, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1});
+const HOLE_INNER_MAT = new THREE.MeshBasicMaterial({color: 0x070707, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2});
 function bulletHole(point, normal){
   const g = new THREE.Group();
-  const outer = new THREE.Mesh(new THREE.CircleGeometry(0.11, 10), new THREE.MeshBasicMaterial({color: 0x3a3530, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1}));
-  const inner = new THREE.Mesh(new THREE.CircleGeometry(0.065, 10), new THREE.MeshBasicMaterial({color: 0x0d0d0d, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2}));
-  inner.position.z = 0.002;
-  g.add(outer); g.add(inner);
-  g.position.copy(point).addScaledVector(normal, 0.025);
-  g.lookAt(point.clone().add(normal));
+  const outer = new THREE.Mesh(HOLE_OUTER_GEO, HOLE_OUTER_MAT);
+  const inner = new THREE.Mesh(HOLE_INNER_GEO, HOLE_INNER_MAT);
+  inner.position.z = 0.003;
+  const c1 = new THREE.Mesh(HOLE_CRACK_GEO, HOLE_INNER_MAT);
+  c1.rotation.z = 0.6; c1.position.z = 0.002;
+  const c2 = new THREE.Mesh(HOLE_CRACK_GEO, HOLE_INNER_MAT);
+  c2.rotation.z = -0.8; c2.position.z = 0.002;
+  g.add(outer); g.add(inner); g.add(c1); g.add(c2);
+  const n = normal.clone().normalize();
+  g.position.copy(point).addScaledVector(n, 0.03);
+  g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
   scene.add(g);
-  setTimeout(() => {
-    scene.remove(g);
-    g.traverse(o => { if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); });
-  }, 20000);
+  setTimeout(() => { scene.remove(g); }, 60000);
 }
 // boş yere dokununca: nişan alınan yöne ateş et; terörist varsa isabet eder
 // pompalı: tek atışta etrafa saçılan 6 bilye (her biri ayrı izler ve isabet eder)
@@ -5052,7 +5199,8 @@ function fireRay(){
       end = h.point.clone();
       target = terrorists.find(t => !t.dead && (() => { for(let x = h.object; x; x = x.parent) if(x === t.g) return true; return false; })()) || null;
       if(!target && h.face){
-        const n = h.face.normal.clone().transformDirection(h.object.matrixWorld);
+        const n = h.face.normal.clone().applyMatrix3(new THREE.Matrix3().getNormalMatrix(h.object.matrixWorld)).normalize();
+        if(n.dot(dir) > 0) n.negate();
         wallHit = {point: end, normal: n};
       }
       break;
@@ -5240,7 +5388,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-215537';
+const APP_VERSION = '2026-10-21-220218';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
