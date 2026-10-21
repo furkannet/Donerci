@@ -1365,46 +1365,45 @@ const vendorSign = new THREE.Mesh(new THREE.PlaneGeometry(1.4,0.5), new THREE.Me
 vendorSign.position.set(-0.82, 1.2, 0); vendorSign.rotation.y = -Math.PI/2;
 vendor.add(vendorSign);
 
-/* ================= Gökyüzünde uçan ejderha (atmosfer, oyuna etkisi yok) ================= */
-// ortak geometri ve malzemeler; yalnızca bir örnek var, görünmediği zamanlarda kapalı
-const DRG_MAT = M(0x3d5a3a), DRG_DARK = M(0x2a3d28), DRG_EYE = new THREE.MeshBasicMaterial({color:0xffb020});
-const DRG_BODY = new THREE.CylinderGeometry(0.5, 0.25, 3.2, 8).rotateX(Math.PI / 2);
-const DRG_HEAD = new THREE.ConeGeometry(0.45, 1.1, 8).rotateX(-Math.PI / 2);
-const DRG_WING = new THREE.BoxGeometry(3.6, 0.05, 1.6);
-const DRG_TAIL = new THREE.ConeGeometry(0.2, 2.2, 6).rotateX(Math.PI / 2);
-const DRG_EYEG = new THREE.SphereGeometry(0.09, 6, 4);
-const dragon = new THREE.Group();
-dragon.visible = false;
-addTo(dragon, DRG_BODY, DRG_MAT, 0, 0, 0);
-addTo(dragon, DRG_HEAD, DRG_MAT, 0, 0.1, -2.0);
-addTo(dragon, DRG_EYEG, DRG_EYE, 0.22, 0.25, -2.25);
-addTo(dragon, DRG_EYEG, DRG_EYE, -0.22, 0.25, -2.25);
-addTo(dragon, DRG_TAIL, DRG_DARK, 0, -0.05, 2.6);
-const wingL = addTo(dragon, DRG_WING, DRG_DARK, -1.8, 0.2, 0.2); wingL.name = 'wingL';
-const wingR = addTo(dragon, DRG_WING, DRG_DARK, 1.8, 0.2, 0.2); wingR.name = 'wingR';
-scene.add(dragon);
-let dragonT = 40 + Math.random() * 60; // ilk uçuşa kadar süre (sn)
-let dragonFly = null;
-function dragonUpdate(dt, now){
-  if(!dragonFly){
-    dragonT -= dt;
-    if(dragonT > 0) return;
-    // soldan ya da sağdan geçecek şekilde rastgele bir yol seç
+/* ================= Gökyüzünde uçan jet (atmosfer, oyuna etkisi yok) ================= */
+const JET_MAT = M(0x8a8a8a), JET_DARK = M(0x444444), JET_GLASS = M(0xaee6ff);
+const JET_BODY = new THREE.CylinderGeometry(0.3, 0.15, 4, 8).rotateX(Math.PI / 2);
+const JET_WING = new THREE.BoxGeometry(3.5, 0.05, 1.2);
+const JET_TAIL = new THREE.BoxGeometry(0.05, 0.8, 0.6);
+const jet = new THREE.Group();
+jet.visible = false;
+addTo(jet, JET_BODY, JET_MAT, 0, 0, 0);
+// burun
+addTo(jet, new THREE.ConeGeometry(0.3, 0.8, 8).rotateX(-Math.PI / 2), JET_MAT, 0, 0, -2.4);
+// kokpit
+addTo(jet, new THREE.SphereGeometry(0.18, 8, 6), JET_GLASS, 0, 0.2, -1.2);
+// kanatlar
+const jetWing = addTo(jet, JET_WING, JET_MAT, 0, 0, 0.2);
+// arka dikey kuyruk
+addTo(jet, JET_TAIL, JET_MAT, 0, 0.4, 1.6);
+// arka yatay kanatlar
+addTo(jet, new THREE.BoxGeometry(1.4, 0.04, 0.5), JET_MAT, 0, 0, 1.6);
+scene.add(jet);
+let jetT = 40 + Math.random() * 60;
+let jetFly = null;
+function jetUpdate(dt, now){
+  if(!jetFly){
+    jetT -= dt;
+    if(jetT > 0) return;
     const dir = Math.random() < 0.5 ? 1 : -1;
-    dragonFly = { t: 0, dur: 18 + Math.random() * 6, x0: -dir * 90, dir, y: 28 + Math.random() * 14, z: -20 - Math.random() * 60 };
-    dragon.visible = true;
+    jetFly = { t: 0, dur: 8 + Math.random() * 4, x0: -dir * 100, dir, y: 35 + Math.random() * 15, z: -30 - Math.random() * 60 };
+    jet.visible = true;
   }
-  const f = dragonFly;
+  const f = jetFly;
   f.t += dt;
   const r = f.t / f.dur;
-  dragon.position.set(f.x0 + f.dir * 180 * r, f.y + Math.sin(f.t * 0.6) * 1.5, f.z);
-  dragon.rotation.y = f.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
-  dragon.rotation.z = Math.sin(f.t * 0.8) * 0.08;
-  const flap = Math.sin(f.t * 6) * 0.5;
-  wingL.rotation.z = flap; wingR.rotation.z = -flap;
+  jet.position.set(f.x0 + f.dir * 200 * r, f.y, f.z);
+  jet.rotation.y = f.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+  // jet hafifçe sağa sola yatar
+  jet.rotation.z = Math.sin(f.t * 2) * 0.1;
   if(r >= 1){
-    dragon.visible = false; dragonFly = null;
-    dragonT = 60 + Math.random() * 120;
+    jet.visible = false; jetFly = null;
+    jetT = 50 + Math.random() * 100;
   }
 }
 
@@ -4524,7 +4523,7 @@ function frame(now){
   }
   updateSky();
   garajDoorUpdate();
-  dragonUpdate(dt, now);
+  jetUpdate(dt, now);
   terroristUpdate();
   lightningUpdate();
   rainSoundUpdate();
@@ -5195,7 +5194,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-082921';
+const APP_VERSION = '2026-10-21-201410';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
