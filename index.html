@@ -534,7 +534,7 @@ const active = () => !shopOpen && !over && !shiftEnded && !tutOpen && !setOpen;
 /* ================= Renderer / sahne ================= */
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:false, powerPreference:'high-performance'});
-renderer.setPixelRatio(1); // performans için sabit çözünürlük
+const DPR_MAX = Math.min(window.devicePixelRatio || 1, 2); // telefonun keskinliği, en fazla 2 kat; kasarsa uyarlanabilir olarak düşer
 renderer.shadowMap.enabled = false; // telefonda kasmaya neden olduğu için kapalı
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -591,7 +591,8 @@ scene.add(sun.target);
 
 let renderScale = 1; // uyarlanabilir çözünürlük: kare hızı düşerse otomatik azalır (0.5–1)
 function resize(){
-  const w = Math.max(1, Math.round(window.innerWidth * renderScale)), h = Math.max(1, Math.round(window.innerHeight * renderScale));
+  const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+  renderer.setPixelRatio(DPR_MAX * renderScale); // çizim yoğunluğu: cihaz keskinliği × uyarlanabilir kalite
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.fov = (w / h) < 0.9 ? 72 : 60;
@@ -5194,7 +5195,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-005829';
+const APP_VERSION = '2026-10-21-082522';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
