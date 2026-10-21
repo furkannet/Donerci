@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Antigravity CLI
+Comment=Google Antigravity AI
+Exec=/home/amasia/.local/bin/agy
+Icon=utilities-terminal
+Terminal=true
+Categories=Development;Utility;

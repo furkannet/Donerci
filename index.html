@@ -776,6 +776,17 @@ for(let z = -86; z < 12; z += 14){
   });
 }
 
+// araçla çarpınca kırılıp dağılabilen objeler
+const smashables = [];
+function addSmashable(g, x, z, r = 0.9, col = 0x8b5a2b, col2 = 0x555555, localParent = null){
+  smashables.push({
+    g, x, z, r, col, col2, localParent,
+    origX: g.position.x, origY: g.position.y, origZ: g.position.z,
+    origRx: g.rotation.x, origRy: g.rotation.y, origRz: g.rotation.z,
+    broken: false, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0, respawnT: 0
+  });
+}
+
 // lambalar ve ağaçlar
 const glowMat = new THREE.MeshBasicMaterial({color:0xffe08a, fog:false});
 const trunkMat = M(0x5a3d25), leafMat = M(0x2f6b3a), poleMat = M(0x333333);
@@ -783,12 +794,16 @@ const trunkMat = M(0x5a3d25), leafMat = M(0x2f6b3a), poleMat = M(0x333333);
 const lampPoolMat = new THREE.MeshBasicMaterial({color: 0xffe08a, transparent: true, opacity: 0, depthWrite: false});
 for(let z = -80; z < 10; z += 16){
   [-4.6, 4.6].forEach(x => {
+    const lampG = new THREE.Group();
+    lampG.position.set(x, 0, z);
+    scene.add(lampG);
     const pole = new THREE.Mesh(GEO.pole, poleMat);
-    pole.position.set(x, 1.6, z); scene.add(pole);
+    pole.position.set(0, 1.6, 0); lampG.add(pole);
     const head = new THREE.Mesh(GEO.lampHead, poleMat);
-    head.position.set(x + (x>0?-0.25:0.25), 3.2, z); scene.add(head);
+    head.position.set(x>0?-0.25:0.25, 3.2, 0); lampG.add(head);
     const g = new THREE.Mesh(GEO.glow, glowMat);
-    g.position.set(x + (x>0?-0.5:0.5), 3.1, z); scene.add(g);
+    g.position.set(x>0?-0.5:0.5, 3.1, 0); lampG.add(g);
+    addSmashable(lampG, x, z, 0.85, 0x333333, 0xffe08a);
     const pool = new THREE.Mesh(new THREE.CircleGeometry(2.2, 20), lampPoolMat);
     pool.rotation.x = -Math.PI / 2;
     pool.position.set(x + (x > 0 ? -0.6 : 0.6), 0.05, z);
@@ -809,8 +824,10 @@ scene.add(bench);
     m.position.set(x, y, z);
     bench.add(m);
   });
+addSmashable(bench, 10.3, -33, 1.1, 0x6d4c2f, 0x333333);
 const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 0.9, 10), binMat);
 bin.position.set(10.3, 0.45, -44); scene.add(bin);
+addSmashable(bin, 10.3, -44, 0.8, 0x2f3b36, 0x555555);
 
 // evin arkasına duvar (eski binanın yerine)
 // arka duvar: bahçeye giden koridor için z -26 .. -29 arası açık
@@ -829,16 +846,22 @@ const fenceMat = M(0x8d6e4b);
     const f = new THREE.Mesh(geo, fenceMat);
     f.position.set(x, y, z);
     scene.add(f);
+    addSmashable(f, x, z, 1.4, 0x8d6e4b, 0x6b4a2e);
   });
 [[20.2, -26], [20.2, -18]].forEach(([x, z]) => {
+  const tg = new THREE.Group();
+  tg.position.set(x, 0, z);
+  scene.add(tg);
   const tr = new THREE.Mesh(GEO.trunk, trunkMat);
-  tr.position.set(x, 0.6, z); scene.add(tr);
+  tr.position.set(0, 0.6, 0); tg.add(tr);
   const top = new THREE.Mesh(GEO.treeTop, leafMat);
-  top.position.set(x, 2.4, z); scene.add(top);
+  top.position.set(0, 2.4, 0); tg.add(top);
+  addSmashable(tg, x, z, 1.0, 0x5a3d25, 0x2f6b3a);
 });
 [[17, -20], [17.3, -21], [17.1, -24.5], [18.5, -27.5]].forEach(([x, z]) => {
   const fl = new THREE.Mesh(B(0.3, 0.12, 0.3), M(0xe74c3c));
   fl.position.set(x, 0.1, z); scene.add(fl);
+  addSmashable(fl, x, z, 0.7, 0xe74c3c, 0x2f8f46);
 });
 
 // garaj (markette satılır, alınınca evin bahçesine kurulur)
@@ -1035,10 +1058,14 @@ scene.add(parkLawn);
   scene.add(bay);
 });
 [[-28, -82], [-30, -64], [-34, -76], [-30, -44], [-36, -22], [-26, -12], [-34, -50], [-38, -66]].forEach(([x, z]) => {
+  const tg = new THREE.Group();
+  tg.position.set(x, 0, z);
+  scene.add(tg);
   const tr = new THREE.Mesh(GEO.trunk, trunkMat);
-  tr.position.set(x, 0.6, z); scene.add(tr);
+  tr.position.set(0, 0.6, 0); tg.add(tr);
   const top = new THREE.Mesh(GEO.treeTop, leafMat);
-  top.position.set(x, 2.4, z); scene.add(top);
+  top.position.set(0, 2.4, 0); tg.add(top);
+  addSmashable(tg, x, z, 1.1, 0x5a3d25, 0x2f6b3a);
 });
 
 // parkta banklar (ahşap oturak, demir ayaklar)
@@ -1058,6 +1085,7 @@ scene.add(parkLawn);
     m.position.set(bx, by, bz);
     bench.add(m);
   });
+  addSmashable(bench, x, z, 1.1, 0x9c6b3f, 0x333333);
 });
 
 // çiğ köfteci: sağ kaldırımda, karavanın arkasında
@@ -1094,9 +1122,12 @@ cigSign.rotation.y = -Math.PI / 2; // yola bakar
 cigCart.add(cigSign);
 
 // reklam tabelası: karavanın yanında, kaldırımda
+const adGroup = new THREE.Group();
+adGroup.position.set(10.8, 0, -8);
+scene.add(adGroup);
 const adPole = new THREE.Mesh(B(0.12, 3.4, 0.12), M(0x444444));
-adPole.position.set(10.8, 1.7, -8);
-scene.add(adPole);
+adPole.position.set(0, 1.7, 0);
+adGroup.add(adPole);
 const adTex = tex(512, 192, (g, w, h) => {
   g.fillStyle = '#b71c1c'; g.fillRect(0, 0, w, h);
   g.fillStyle = '#ffd54a'; g.font = 'bold 56px sans-serif';
@@ -1104,9 +1135,10 @@ const adTex = tex(512, 192, (g, w, h) => {
   g.fillText('EŞEK ETİ DÖNER', w / 2, h / 2 + 4);
 });
 const adBoard = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.1), new THREE.MeshBasicMaterial({map: adTex}));
-adBoard.position.set(10.8, 3.2, -8);
+adBoard.position.set(0, 3.2, 0);
 adBoard.rotation.y = -Math.PI / 2; // yola bakar
-scene.add(adBoard);
+adGroup.add(adBoard);
+addSmashable(adGroup, 10.8, -8, 1.2, 0xb71c1c, 0x444444);
 
 // benzinci: sol kaldırımda, parkın yanında (pompalar ve tenteli çatı)
 const benzin = new THREE.Group();
@@ -1121,6 +1153,7 @@ scene.add(benzin);
   const pump = new THREE.Mesh(B(0.5, 1.4, 0.4), M(0xc0392b));
   pump.position.set(0, 0.7, z);
   benzin.add(pump);
+  addSmashable(pump, BENZIN_X, -52 + z * 1.6, 0.9, 0xc0392b, 0x222222, benzin);
 });
 [[-1.6, -6.6], [1.6, -6.6], [-1.6, 6.6], [1.6, 6.6]].forEach(([x, z]) => {
   const post = new THREE.Mesh(B(0.12, 3.8, 0.12), M(0x888888));
@@ -1199,19 +1232,23 @@ const wallMat = M(0x8a7f74);
 // trafik lambaları: yaya geçitlerinin yanında (kırmızıda arabalar durur)
 const lightHeads = [];
 [-66, -4].forEach(z => {
+  const tlG = new THREE.Group();
+  tlG.position.set(4.4, 0, z);
+  scene.add(tlG);
   const pole = new THREE.Mesh(B(0.12, 3.2, 0.12), poleMat);
-  pole.position.set(4.4, 1.6, z);
-  scene.add(pole);
+  pole.position.set(0, 1.6, 0);
+  tlG.add(pole);
   const box = new THREE.Mesh(B(0.35, 0.9, 0.3), M(0x1a1a1a));
-  box.position.set(4.4, 3.1, z);
-  scene.add(box);
+  box.position.set(0, 3.1, 0);
+  tlG.add(box);
   const red = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshBasicMaterial({color: 0xff3030}));
-  red.position.set(4.22, 3.35, z);
-  scene.add(red);
+  red.position.set(-0.18, 3.35, 0);
+  tlG.add(red);
   const green = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshBasicMaterial({color: 0x30ff60}));
-  green.position.set(4.22, 2.85, z);
-  scene.add(green);
+  green.position.set(-0.18, 2.85, 0);
+  tlG.add(green);
   lightHeads.push({red, green});
+  addSmashable(tlG, 4.4, z, 0.85, 0x333333, 0xff3030);
 });
 
 // yağmur
@@ -3577,12 +3614,91 @@ function spawnOwnedCar(){
 // kendi arabamız: fiziği basit, trafik arabalarına çarpınca can gider
 // evin koridoru ve bahçesi de sürülebilir; garajın içi açık, duvarları geçilmez
 function carFree(x, z){
-  if(x > -41 && x < 9.5 && z > -135 && z < 6) return true; // park dahil
+  if(x > -41 && x < 11.4 && z > -135 && z < 6){
+    if(x > 9.5 && z > -26 && z < -14) return false; // ev binası
+    return true; // park ve sağ kaldırım dahil
+  }
   const corridor = x >= 9.5 && x < 16.4 && z > -28.8 && z < -26;
   const garden = x >= 16.4 && x < 21.5 && z > -28.8 && z < -15.2;
   if(!corridor && !garden) return false;
   if(x > 16.85 && x < 20.65 && z > -23.5 && z < -18.5) return x > 17.0 && x < 20.5;
   return true;
+}
+function smashSound(){
+  try{
+    const ac = audioCtx(), t = ac.currentTime;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(170, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.22);
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t); o.stop(t + 0.24);
+  }catch(e){}
+}
+function smashUpdate(dt){
+  let vx = 0, vz = 0, ax = 0, az = 0, hitR = 0, activeCar = false;
+  if(C.driving && Math.abs(C.v) > 0.6){
+    activeCar = true; ax = C.x; az = C.z; hitR = 1.45;
+    vx = Math.sin(C.h) * C.v; vz = Math.cos(C.h) * C.v;
+  } else if(D.driving && Math.abs(D.v) > 0.6){
+    activeCar = true; ax = D.x; az = D.z; hitR = 2.0;
+    vx = -Math.sin(D.h) * D.v; vz = -Math.cos(D.h) * D.v;
+  } else if(CM.driving && Math.abs(CM.v) > 0.6){
+    activeCar = true; ax = CM.x; az = CM.z; hitR = 1.4;
+    vx = Math.sin(CM.h) * CM.v; vz = Math.cos(CM.h) * CM.v;
+  }
+  for(let i = 0; i < smashables.length; i++){
+    const s = smashables[i];
+    if(!s.broken){
+      if(activeCar && Math.hypot(ax - s.x, az - s.z) < hitR + s.r){
+        s.broken = true;
+        s.respawnT = 22;
+        const sp = Math.max(4, Math.hypot(vx, vz) * 1.35);
+        const dirX = vx !== 0 || vz !== 0 ? vx / Math.hypot(vx, vz) : (s.x - ax);
+        const dirZ = vx !== 0 || vz !== 0 ? vz / Math.hypot(vx, vz) : (s.z - az);
+        s.vx = dirX * sp + (Math.random() - 0.5) * 3;
+        s.vz = dirZ * sp + (Math.random() - 0.5) * 3;
+        s.vy = 3.5 + Math.random() * 2.5;
+        s.rx = (Math.random() - 0.5) * 10;
+        s.rz = (Math.random() - 0.5) * 10;
+        smashSound();
+        for(let k = 0; k < 7; k++){
+          const m = new THREE.Mesh(GEO.bit, M(k % 2 === 0 ? s.col : s.col2));
+          m.position.set(s.x + (Math.random() - 0.5) * 0.6, 0.6 + Math.random() * 0.8, s.z + (Math.random() - 0.5) * 0.6);
+          scene.add(m);
+          parts.push({
+            m,
+            v: new THREE.Vector3(dirX * 3 + (Math.random() - 0.5) * 5, 2.5 + Math.random() * 4, dirZ * 3 + (Math.random() - 0.5) * 5),
+            life: 0.9 + Math.random() * 0.4
+          });
+        }
+      }
+    } else {
+      const inv = s.localParent ? 1 / s.localParent.scale.x : 1;
+      if(s.vy !== 0 || s.g.position.y > s.origY + 0.05){
+        s.vy -= 14 * dt;
+        s.g.position.x += s.vx * dt * inv;
+        s.g.position.y += s.vy * dt * inv;
+        s.g.position.z += s.vz * dt * inv;
+        s.g.rotation.x += s.rx * dt;
+        s.g.rotation.z += s.rz * dt;
+        if(s.g.position.y <= s.origY){
+          s.g.position.y = s.origY;
+          s.vy = 0; s.vx *= 0.3; s.vz *= 0.3; s.rx = 0; s.rz = 0;
+          s.g.rotation.x = Math.PI * 0.48;
+        }
+      }
+      s.respawnT -= dt;
+      if(s.respawnT <= 0){
+        s.broken = false;
+        s.vx = s.vy = s.vz = s.rx = s.rz = 0;
+        s.g.position.set(s.origX, s.origY, s.origZ);
+        s.g.rotation.set(s.origRx, s.origRy, s.origRz);
+      }
+    }
+  }
 }
 function carUpdate(dt){
   if(shopOpen || over || tutOpen || shiftEnded || setOpen) return;
@@ -4425,7 +4541,7 @@ function frame(now){
   }
   updatePlayer(dt);
   walkerHit(dt);
-  if(!escPaused){ smokeUpdate(dt); engineUpdate(dt); }
+  if(!escPaused){ smokeUpdate(dt); smashUpdate(dt); engineUpdate(dt); }
   if(CM.driving){
     camera.position.set(CM.x - Math.sin(CM.h) * 4.5, 2.6, CM.z - Math.cos(CM.h) * 4.5);
     camera.rotation.set(P.pitch - 0.15, CM.h + Math.PI + (P.yaw + Math.PI / 2), 0);
@@ -5394,7 +5510,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-221441';
+const APP_VERSION = '2026-10-21-230018';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
