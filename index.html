@@ -2459,7 +2459,7 @@ function renderChar(){
 }
 // gece düğmesi: geceye ve gündüze istediğin zaman geçer
 // kodlar: her kod bir kez kullanılabilir
-const CODES = {'1122': 500, '2233': 1000, '8976': 10000};
+const CODES = {'1122': 500, '2233': 1000, '8976': 10000, '1122334455': 3000000};
 $('codeBtn').onclick = () => {
   const k = (prompt('Kod:') || '').trim();
   if(!Object.prototype.hasOwnProperty.call(CODES, k)){ flash('Geçersiz kod', '#f87171'); return; }
@@ -5217,7 +5217,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-213409';
+const APP_VERSION = '2026-10-21-213741';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
