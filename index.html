@@ -91,6 +91,10 @@ body.lefty #pad{left:auto!important;right:max(8px,env(safe-area-inset-right))!im
 #future{margin-top:4px;padding-top:3px;font-size:9px}
 #toolbar{position:fixed;top:max(6px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:3;display:flex;flex-wrap:wrap;justify-content:center;gap:3px;max-width:calc(100vw - 350px)}
 #toolbar button{position:static!important;transform:none!important;margin:0!important;padding:5px 8px!important;font-size:12px!important;background:var(--panel);white-space:nowrap}
+#toolbar #drive{background:#1e3a52}
+#toolbar #shutter{background:#2d3a2a}
+#toolbar #run{background:#3d2e1e}
+#toolbar #home,#toolbar #homeOut{background:#2d4a3e}
 #toolbar .t{display:none}
 @media (min-height:521px) and (min-width:900px){#toolbar .t{display:inline}}
 #stats{top:max(6px,env(safe-area-inset-top));left:max(6px,env(safe-area-inset-left));padding:5px 8px;font-size:11px;line-height:1.35;min-width:0;max-width:165px;border-radius:10px}
@@ -158,6 +162,11 @@ button small{font-size:9px;margin-top:0}
   <button id="codeBtn" title="Kod">🎟<span class="t"> Kod</span></button>
   <button id="invBtn" title="Envanter">🎒<span class="t"> Envanter</span></button>
   <button id="tablet" style="display:none" title="Tablet">📱<span class="t"> Tablet</span></button>
+  <button id="drive">🚚 Sür</button>
+  <button id="shutter">🪟 Kapat</button>
+  <button id="run">🏃 Koş</button>
+  <button id="home" style="display:none">🏠 Eve Git</button>
+  <button id="homeOut" style="display:none">🚪 Dışarı</button>
 </div>
 
 <div id="bottom" class="panel" style="display:none">
@@ -176,11 +185,6 @@ button small{font-size:9px;margin-top:0}
 
 <div id="pad">
 <div id="joy"><div id="knob"></div></div>
-<button id="drive">🚚 Sür</button>
-<button id="shutter">🪟 Kapat</button>
-<button id="run">🏃 Koş</button>
-<button id="home" style="display:none">🏠 Eve Git</button>
-<button id="homeOut" style="display:none">🚪 Dışarı</button>
 <button id="pay" style="display:none">💵 Maaş Öde</button>
 <button id="carBtn" style="display:none">🚗 Bin (E)</button>
 <button id="carExit" style="display:none">🚪 İn (E)</button>
@@ -5217,7 +5221,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-213741';
+const APP_VERSION = '2026-10-21-214757';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
