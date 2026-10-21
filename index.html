@@ -4936,15 +4936,23 @@ window.addEventListener('keydown', e => {
   if(e.key.toLowerCase() !== 'r' || e.repeat || !active()) return;
   reload();
 });
-// mermi izi: kameradan verilen noktaya parlak ince bir mermi, kısa süre görünür
+// mermi izi: namlu ucundan verilen noktaya parlak ince bir mermi izi, kısa süre görünür
 function bulletTrail(to){
-  const from = camera.getWorldPosition(new THREE.Vector3());
+  const id = S.hand && S.hand.id;
+  const held = id && (thirdPerson ? heldThird : heldFirst)[id];
+  let from;
+  if(held){
+    held.updateMatrixWorld(true);
+    from = held.localToWorld(new THREE.Vector3(0, 0.02, MUZZLE_Z[id] || -0.35));
+  } else {
+    from = camera.localToWorld(new THREE.Vector3(0.28, -0.22, -0.5));
+  }
   const len = from.distanceTo(to);
-  const bullet = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, len), new THREE.MeshBasicMaterial({color: 0xffd966}));
+  const bullet = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, len), new THREE.MeshBasicMaterial({color: 0xffdf66}));
   bullet.position.copy(from).add(to).multiplyScalar(0.5);
   bullet.lookAt(to);
   scene.add(bullet);
-  setTimeout(() => { scene.remove(bullet); bullet.geometry.dispose(); bullet.material.dispose(); }, 160);
+  setTimeout(() => { scene.remove(bullet); bullet.geometry.dispose(); bullet.material.dispose(); }, 180);
 }
 // namlu ucundan kıvılcım: silahın ucunda kısa süre parlayan ateş topu ve kıvılcımlar
 const MUZZLE_Z = {uzi: -0.42, tabanca: -0.27, pompali: -0.78};
@@ -5003,16 +5011,27 @@ function shootTerrorist(t){
 }
 // mermi izi: duvara, yere ya da bir nesneye çarpan yerde koyu bir delik; 20 sn sonra kaybolur
 function bulletHole(point, normal){
-  const m = new THREE.Mesh(new THREE.CircleGeometry(0.07, 10), new THREE.MeshBasicMaterial({color: 0x161616, side: THREE.DoubleSide}));
-  m.position.copy(point).addScaledVector(normal, 0.02);
-  m.lookAt(point.clone().add(normal));
-  scene.add(m);
-  setTimeout(() => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }, 20000);
+  const g = new THREE.Group();
+  const outer = new THREE.Mesh(new THREE.CircleGeometry(0.11, 10), new THREE.MeshBasicMaterial({color: 0x3a3530, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1}));
+  const inner = new THREE.Mesh(new THREE.CircleGeometry(0.065, 10), new THREE.MeshBasicMaterial({color: 0x0d0d0d, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2}));
+  inner.position.z = 0.002;
+  g.add(outer); g.add(inner);
+  g.position.copy(point).addScaledVector(normal, 0.025);
+  g.lookAt(point.clone().add(normal));
+  scene.add(g);
+  setTimeout(() => {
+    scene.remove(g);
+    g.traverse(o => { if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); });
+  }, 20000);
 }
 // boş yere dokununca: nişan alınan yöne ateş et; terörist varsa isabet eder
 // pompalı: tek atışta etrafa saçılan 6 bilye (her biri ayrı izler ve isabet eder)
 const PELLETS = {pompali: 6};
 const PELLET_SPREAD = 0.09;
+function isVisibleInHierarchy(o){
+  for(let x = o; x; x = x.parent) if(!x.visible) return false;
+  return true;
+}
 function fireRay(){
   const w = spendAmmo();
   if(!w) return;
@@ -5028,7 +5047,8 @@ function fireRay(){
     let end = r2.ray.at(80, new THREE.Vector3());
     let target = null, wallHit = null;
     for(const h of r2.intersectObjects(scene.children, true)){
-      if(isHeld(h.object)) continue;
+      if(!h.object.isMesh || !isVisibleInHierarchy(h.object) || isHeld(h.object)) continue;
+      if(h.object.material && h.object.material.transparent && h.object.material.opacity === 0) continue;
       end = h.point.clone();
       target = terrorists.find(t => !t.dead && (() => { for(let x = h.object; x; x = x.parent) if(x === t.g) return true; return false; })()) || null;
       if(!target && h.face){
@@ -5041,8 +5061,7 @@ function fireRay(){
     if(target){ if(!hitSet.has(target)){ hitSet.add(target); hitTerrorist(target); } }
     else {
       anyMiss = true;
-      if(wallHit && count === 1) bulletHole(wallHit.point, wallHit.normal);
-      else if(wallHit && Math.random() < 0.35) bulletHole(wallHit.point, wallHit.normal); // saçılan bilyeler bazen iz bırakır
+      if(wallHit) bulletHole(wallHit.point, wallHit.normal);
     }
   }
   if(anyMiss && hitSet.size === 0) flash('Iskaladın', '#ffd54a');
@@ -5221,7 +5240,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-214757';
+const APP_VERSION = '2026-10-21-215537';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
