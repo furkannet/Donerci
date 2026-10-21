@@ -1087,14 +1087,6 @@ cigSign.position.set(-1.02, 1.3, 0);
 cigSign.rotation.y = -Math.PI / 2; // yola bakar
 cigCart.add(cigSign);
 
-// COMOGENE dükkanının önündeki ağaç
-const comoTreeTrunk = new THREE.Mesh(GEO.trunk, trunkMat);
-comoTreeTrunk.position.set(5.8, 0.6, -12);
-scene.add(comoTreeTrunk);
-const comoTreeTop = new THREE.Mesh(GEO.treeTop, leafMat);
-comoTreeTop.position.set(5.8, 2.4, -12);
-scene.add(comoTreeTop);
-
 // reklam tabelası: karavanın yanında, kaldırımda
 const adPole = new THREE.Mesh(B(0.12, 3.4, 0.12), M(0x444444));
 adPole.position.set(10.8, 1.7, -8);
@@ -4635,6 +4627,29 @@ comoTruck.add(comoMenuBoard);
 comoTruck.children.forEach(ch => {
   if(ch.material && ch.material.map === marketSignTex) ch.material = new THREE.MeshBasicMaterial({map: cigSignTex});
 });
+// COMOGENE dükkanının etrafındaki saksılı çiçekler
+const comoPotGeo = new THREE.CylinderGeometry(0.24, 0.17, 0.36, 8);
+const comoBushGeo = B(0.32, 0.28, 0.32);
+const comoBloomGeo = B(0.13, 0.13, 0.13);
+const comoPotMat = M(0xb85d38), comoLeafMat = M(0x2f8f46);
+[
+  [1.75, -2.3, 0xe74c3c], [1.75, -0.9, 0xf1c40f], [1.75, 0.9, 0xe84393], [1.75, 2.3, 0xe74c3c],
+  [1.3, 2.75, 0xf1c40f], [-0.2, 2.75, 0xe84393],
+  [1.1, -2.75, 0xe84393], [0.0, -2.75, 0xf1c40f]
+].forEach(([px, pz, col]) => {
+  const pot = new THREE.Mesh(comoPotGeo, comoPotMat);
+  pot.position.set(px, 0.18, pz);
+  comoTruck.add(pot);
+  const bush = new THREE.Mesh(comoBushGeo, comoLeafMat);
+  bush.position.set(px, 0.48, pz);
+  comoTruck.add(bush);
+  const flMat = M(col);
+  [[-0.08, 0.65, -0.06], [0.08, 0.67, 0.06], [0, 0.69, -0.02]].forEach(([fx, fy, fz]) => {
+    const bl = new THREE.Mesh(comoBloomGeo, flMat);
+    bl.position.set(px + fx, fy, pz + fz);
+    comoTruck.add(bl);
+  });
+});
 resize();
 applySettings();
 drawPC();
@@ -5202,7 +5217,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-212601';
+const APP_VERSION = '2026-10-21-213409';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
