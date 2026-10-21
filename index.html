@@ -1958,23 +1958,29 @@ function burst(){
 
 /* ================= Ses ================= */
 let actx = null;
-function beep(f = 660, d = 0.08, type = 'square', v = 0.04){
+function audioCtx(){
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+  if(actx.state === 'suspended') actx.resume().catch(() => {});
+  return actx;
+}
+['pointerdown', 'touchstart', 'mousedown', 'keydown', 'click'].forEach(ev => {
+  window.addEventListener(ev, () => {
+    try{ audioCtx(); }catch(e){}
+  }, {passive: true});
+});
+function beep(f = 660, d = 0.08, type = 'square', v = 0.12){
   try{
-    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.type = type; o.frequency.value = f; g.gain.value = v;
-    o.connect(g); g.connect(actx.destination);
-    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
-    o.stop(actx.currentTime + d);
+    const ac = audioCtx();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = f; g.gain.setValueAtTime(v, ac.currentTime);
+    o.connect(g); g.connect(ac.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + d);
+    o.stop(ac.currentTime + d);
   }catch(e){}
 }
 
 /* ================= Ortam sesi ================= */
 let amb = null;
-function audioCtx(){
-  actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-  return actx;
-}
 // kaldırım ve şehir uğultusu (alçak frekans gürültüsü, döngü)
 function startAmbient(){
   return; // ortam uğultusu kapalı (yağmur sesi gibi duyuluyordu)
@@ -5388,7 +5394,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-220218';
+const APP_VERSION = '2026-10-21-221441';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
