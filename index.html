@@ -534,7 +534,7 @@ const active = () => !shopOpen && !over && !shiftEnded && !tutOpen && !setOpen;
 /* ================= Renderer / sahne ================= */
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:false, powerPreference:'high-performance'});
-const DPR_MAX = 1; // performans için sabit çözünürlük (cihaz yoğunluğu kullanılmaz)
+const DPR_MAX = 1.5; // çizim yoğunluğu üst sınırı (%150); kare hızı düşerse uyarlanabilir olarak azalır
 renderer.shadowMap.enabled = false; // telefonda kasmaya neden olduğu için kapalı
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -5195,7 +5195,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-082735';
+const APP_VERSION = '2026-10-21-082836';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
