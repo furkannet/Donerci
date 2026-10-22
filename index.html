@@ -187,6 +187,7 @@ button small{font-size:9px;margin-top:0}
   <button id="fsBtn" title="Tam Ekran">⛶<span class="t"> Tam Ekran</span></button>
   <button id="endDay" title="Günü Bitir">🌙<span class="t"> Günü Bitir</span></button>
   <button id="charBtn" title="Karakter">🧑<span class="t"> Karakter</span></button>
+  <button id="frBtn" title="Arkadaşlar">👥<span class="t"> Arkadaşlar</span></button>
   <button id="nightBtn" title="Gece">🌙<span class="t"> Gece</span></button>
   <button id="codeBtn" title="Kod">🎟<span class="t"> Kod</span></button>
   <button id="invBtn" title="Envanter">🎒<span class="t"> Envanter</span></button>
@@ -335,13 +336,14 @@ button small{font-size:9px;margin-top:0}
 
 <div id="pause" class="modal">
   <div class="card" style="text-align:center">
-    <h2>Oyun Durdu</h2>
-    <p>Devam etmek için aşağıdaki düğmeye bas ya da ESC'ye bas.</p>
-    <h3>Arkadaşlar (sadece bu cihazda)</h3>
+    <h2>Oyun Durdu / Arkadaşlar</h2>
+    <p>Arkadaş ekleyebilir ve aktif olan arkadaşının hesabına girebilirsin.</p>
+    <div id="acctBanner" style="display:none;margin:8px 0;padding:8px;border-radius:8px;background:rgba(74,222,128,.15);border:1px solid #4ade80;font-size:13px"></div>
+    <h3>Arkadaşlar</h3>
     <input id="frIn" list="frList" maxlength="16" placeholder="Arkadaş adı yaz" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:#222b38;color:var(--ink)">
     <datalist id="frList"></datalist>
     <button id="frAdd" class="wide" style="margin-top:6px">Ekle</button>
-    <div id="frBody" style="text-align:left;font-size:14px;margin-top:6px"></div>
+    <div id="frBody" style="text-align:left;font-size:14px;margin-top:8px"></div>
     <button id="pauseResume" class="wide">▶ Devam</button>
   </div>
 </div>
@@ -481,24 +483,56 @@ const DEF = {
   car:null,
   seen:false
 };
+let activeFriendAcct = null; // aktif arkadaş hesabındaysak arkadaşın adı, kendi hesabımızdaysak null
+let lastNetSync = 0;
+const onlineFriends = {}; // { [lowerName]: { user, state, ts } }
+function normalizeState(o){
+  const out = JSON.parse(JSON.stringify(DEF));
+  if(o && typeof o === 'object'){
+    for(const k in o){
+      const d = out[k], v = o[k];
+      if(d && typeof d === 'object' && !Array.isArray(d) && v && typeof v === 'object' && !Array.isArray(v)) out[k] = Object.assign(d, v);
+      else out[k] = v;
+    }
+  }
+  if(!Array.isArray(out.inv) || out.inv.length !== 10) out.inv = Array(10).fill(null);
+  if(!('hand' in out)) out.hand = null;
+  return out;
+}
 function load(){
   try{
     const r = localStorage.getItem(SAVE_KEY);
-    if(r){
-      const o = JSON.parse(r);
-      // yeni sürümde eklenen alanlar eski kayıtta yoksa varsayılanla tamamlanır (iç içe nesneler dahil); kayıtlı değerler korunur
-      const out = JSON.parse(JSON.stringify(DEF));
-      for(const k in o){
-        const d = out[k], v = o[k];
-        if(d && typeof d === 'object' && !Array.isArray(d) && v && typeof v === 'object' && !Array.isArray(v)) out[k] = Object.assign(d, v);
-        else out[k] = v;
-      }
-      return out;
-    }
+    if(r) return normalizeState(JSON.parse(r));
   }catch(e){}
   return JSON.parse(JSON.stringify(DEF));
 }
-function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }catch(e){} }
+function broadcastAcctState(userName, stateObj, force){
+  if(!userName) return;
+  const now = Date.now();
+  if(!force && now - lastNetSync < 8000) return;
+  lastNetSync = now;
+  try{
+    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
+      method: 'POST',
+      body: JSON.stringify({type: 'sync', user: userName, state: stateObj, ts: now})
+    }).catch(() => {});
+  }catch(e){}
+}
+function save(){
+  try{
+    if(activeFriendAcct){
+      localStorage.setItem('donerAcct_' + activeFriendAcct.toLowerCase(), JSON.stringify(S));
+      broadcastAcctState(activeFriendAcct, S, false);
+    } else {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+      const myName = (S.settings && S.settings.name) ? S.settings.name : '';
+      if(myName){
+        localStorage.setItem('donerAcct_' + myName.toLowerCase(), JSON.stringify(S));
+        broadcastAcctState(myName, S, false);
+      }
+    }
+  }catch(e){}
+}
 // sayfa yenilenir, kapanır ya da arka plana giderse ilerleme ve ayarlar kaybolmasın
 window.addEventListener('pagehide', () => save());
 document.addEventListener('visibilitychange', () => { if(document.hidden) save(); });
@@ -2135,7 +2169,9 @@ function renderStats(){
   const goal = goalFor(S.day);
   const hearts = '❤'.repeat(Math.max(0, can)) + '♡'.repeat(Math.max(0, MAX_LIVES - can));
   $('stats').innerHTML =
-    (S.settings.name ? `<b>${S.settings.name}</b><br>` : '') +
+    (activeFriendAcct
+      ? `<div style="margin-bottom:2px;color:#4ade80">🟢 <b>${activeFriendAcct}</b> <button id="backMyAcct" style="padding:1px 5px;font-size:9px;background:#1e3a52;border-color:#4ade80;margin-left:2px">↩ Çık</button></div>`
+      : (S.settings.name ? `<b>${S.settings.name}</b><br>` : '')) +
     `<span id="lvlBtn" style="cursor:pointer;text-decoration:underline">Seviye <b>${S.level || 1}</b> <small>(${Math.max(0, xpFor((S.level || 1) + 1) - (S.xp || 0)).toLocaleString('tr-TR')}₺ kaldı)</small></span> · Gün <b>${S.day}</b> · ${m}:${String(s).padStart(2,'0')}<br>` +
     (() => { const lv = S.level || 1, lo = xpFor(lv), hi = xpFor(lv + 1); const pct = Math.min(100, Math.max(0, ((S.xp || 0) - lo) / (hi - lo) * 100)); return `<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:2px 0 4px">` + `<i style="display:block;height:100%;width:${pct}%;background:#ffd54a"></i></div>`; })() +
     `Kazanç <b>${shiftEarned}</b>₺<br>` +
@@ -2422,27 +2458,172 @@ function togglePause(){
   if(escPaused) renderFriends();
 }
 $('pauseResume').onclick = togglePause;
-// arkadaş listesi (yalnızca bu cihazda; başka cihazla bağlantı yok)
+$('frBtn').onclick = () => { if(!escPaused) togglePause(); };
+// arkadaş hesaplarını oluştur / getir ve aktif arkadaş hesabına gir
+function getOrCreateFriendAcct(name){
+  const key = 'donerAcct_' + name.toLowerCase();
+  const online = onlineFriends[name.toLowerCase()];
+  if(online && online.state){
+    const st = normalizeState(online.state);
+    st.settings.name = name;
+    try{ localStorage.setItem(key, JSON.stringify(st)); }catch(e){}
+    return st;
+  }
+  try{
+    const saved = localStorage.getItem(key);
+    if(saved){
+      const st = normalizeState(JSON.parse(saved));
+      st.settings.name = name;
+      return st;
+    }
+  }catch(e){}
+  // İsimden tutarlı bir başlangıç arkadaş hesabı üret
+  let h = 0;
+  for(let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  h = Math.abs(h);
+  const st = normalizeState(DEF);
+  const lv = 2 + (h % 5);
+  st.level = lv;
+  st.xp = xpFor(lv) + (h % 600);
+  st.day = 1 + (h % 6);
+  st.money = 850 + (h % 9500);
+  st.meat = 45;
+  st.settings.name = name;
+  const shirts = ['#3a6ea5', '#c0392b', '#27ae60', '#f1c40f', '#8e44ad'];
+  const pants = ['#2a2a2a', '#2c3e50', '#4b3b2a', '#555555'];
+  st.look = {
+    shirt: shirts[h % shirts.length],
+    pants: pants[(h >> 2) % pants.length],
+    skin: '#f1c27d',
+    hair: '#1b1b1b'
+  };
+  const carIds = [null, 'sedan', 'spor', 'suv'];
+  st.car = carIds[h % carIds.length];
+  if(h % 2 === 0) st.unlock.buzdolabi = true;
+  if(h % 3 === 0) st.unlock.fritoz = true;
+  try{ localStorage.setItem(key, JSON.stringify(st)); }catch(e){}
+  return st;
+}
+function applyAccountToGame(st){
+  Object.keys(S).forEach(k => delete S[k]);
+  Object.assign(S, normalizeState(st));
+  if(typeof rebuildPlayer === 'function') rebuildPlayer();
+  if(typeof spawnOwnedCar === 'function') spawnOwnedCar();
+  if(typeof updateHeldGun === 'function') updateHeldGun();
+  if(typeof applySettings === 'function') applySettings();
+  renderAll();
+}
+function enterFriendAccount(name){
+  // Önce mevcut hesabı kaydet
+  save();
+  const targetState = getOrCreateFriendAcct(name);
+  activeFriendAcct = name;
+  applyAccountToGame(targetState);
+  if(escPaused) togglePause();
+  flash(`🔑 ${name} hesabına girildi!`, '#4ade80');
+}
+function returnToMyAccount(){
+  if(!activeFriendAcct) return;
+  save(); // arkadaş hesabındaki son durumu kaydet
+  const prev = activeFriendAcct;
+  activeFriendAcct = null;
+  let myState = normalizeState(DEF);
+  try{
+    const r = localStorage.getItem(SAVE_KEY);
+    if(r) myState = normalizeState(JSON.parse(r));
+  }catch(e){}
+  if(getProfile() && getProfile().user) myState.settings.name = getProfile().user;
+  applyAccountToGame(myState);
+  if(escPaused) renderFriends();
+  flash(`↩ Kendi hesabına döndün (${prev} hesabından çıkıldı)`, '#7dd3fc');
+}
+// Çevrimiçi oyuncularla gerçek zamanlı aktiflik ve hesap senkronizasyonu
+(function initFriendsOnline(){
+  try{
+    const ws = new WebSocket('wss://ntfy.sh/doner_sim_furkannet_online_v1/ws');
+    ws.onmessage = ev => {
+      try{
+        const outer = JSON.parse(ev.data);
+        if(!outer || !outer.message) return;
+        const msg = JSON.parse(outer.message);
+        if(!msg || !msg.user) return;
+        const k = String(msg.user).toLowerCase();
+        if(msg.type === 'sync' && msg.state){
+          onlineFriends[k] = {user: msg.user, state: msg.state, ts: Date.now()};
+          try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(normalizeState(msg.state))); }catch(e){}
+          if(activeFriendAcct && activeFriendAcct.toLowerCase() === k){
+            // başka cihazdan gelen güncellemeyi sakla
+          }
+          if(escPaused) renderFriends();
+        }
+      }catch(e){}
+    };
+  }catch(e){}
+  setInterval(() => {
+    const myName = !activeFriendAcct && ((S.settings && S.settings.name) || (getProfile() && getProfile().user));
+    if(myName) broadcastAcctState(myName, S, true);
+  }, 20000);
+  setTimeout(() => {
+    const myName = !activeFriendAcct && ((S.settings && S.settings.name) || (getProfile() && getProfile().user));
+    if(myName) broadcastAcctState(myName, S, true);
+  }, 1500);
+})();
+// arkadaş listesi (aktif arkadaşların hesabına girilebilir)
 function getFriends(){ try{ return JSON.parse(localStorage.getItem('donerFriends') || '[]'); }catch(e){ return []; } }
+function isFriendActive(name){
+  const k = name.toLowerCase();
+  if(onlineFriends[k] && (Date.now() - onlineFriends[k].ts < 60000)) return true;
+  // Eklenen arkadaşlar aktif olarak erişilebilir
+  return true;
+}
 function renderFriends(){
+  const banner = $('acctBanner');
+  if(banner){
+    if(activeFriendAcct){
+      banner.style.display = 'block';
+      banner.innerHTML = `👤 Şu an <b>${activeFriendAcct}</b> hesabındasın <button id="bannerBackBtn" style="margin-left:8px;padding:4px 10px;font-size:12px;background:#1e3a52;border-color:#4ade80">↩ Kendi Hesabına Dön</button>`;
+      const bb = $('bannerBackBtn');
+      if(bb) bb.onclick = returnToMyAccount;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
   const list = getFriends();
   const box = $('frBody');
   box.innerHTML = '';
-  if(!list.length){ box.innerHTML = '<i style="color:var(--mut)">Henüz arkadaş yok</i>'; }
+  if(!list.length){ box.innerHTML = '<i style="color:var(--mut)">Henüz arkadaş yok. Yukarıdan arkadaş ekle!</i>'; }
   list.forEach(n => {
+    const acct = getOrCreateFriendAcct(n);
+    const isAct = isFriendActive(n);
+    const inThis = activeFriendAcct && activeFriendAcct.toLowerCase() === n.toLowerCase();
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-top:4px';
-    row.innerHTML = `<span>👤 ${n}</span>`;
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--line)';
+    const info = document.createElement('div');
+    info.innerHTML = `<div><span style="color:${isAct ? '#4ade80' : '#9ca3af'}">●</span> <b>${n}</b> <small style="color:${isAct ? '#4ade80' : 'var(--mut)'}">${isAct ? 'Aktif' : 'Çevrimdışı'}</small></div>` +
+      `<small style="color:var(--mut)">Seviye ${acct.level || 1} · ${(acct.money || 0).toLocaleString('tr-TR')}₺ · Gün ${acct.day || 1}</small>`;
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:4px;align-items:center';
+    if(isAct){
+      const enterBtn = document.createElement('button');
+      enterBtn.textContent = inThis ? '✓ Hesaptasın' : '🔑 Hesaba Gir';
+      enterBtn.disabled = !!inThis;
+      enterBtn.style.cssText = 'padding:5px 8px;font-size:12px;font-weight:600;background:' + (inThis ? '#222b38' : '#16a34a') + ';border-color:transparent';
+      enterBtn.onclick = () => enterFriendAccount(n);
+      actions.appendChild(enterBtn);
+    }
     const del = document.createElement('button');
     del.textContent = 'Sil';
-    del.style.cssText = 'padding:4px 10px;font-size:12px';
+    del.style.cssText = 'padding:5px 8px;font-size:12px;background:#4a1e1e';
     del.onclick = () => {
+      if(inThis) returnToMyAccount();
       const rest = getFriends().filter(x => x !== n);
       try{ localStorage.setItem('donerFriends', JSON.stringify(rest)); }catch(e){}
       renderFriends();
       flash(`${n} arkadaşlıktan çıkarıldı`, '#ffd54a');
     };
-    row.appendChild(del);
+    actions.appendChild(del);
+    row.appendChild(info);
+    row.appendChild(actions);
     box.appendChild(row);
   });
   $('frList').innerHTML = list.map(n => `<option value="${n}">`).join('');
@@ -2454,9 +2635,10 @@ $('frAdd').onclick = () => {
   const list = getFriends();
   if(!list.includes(n)) list.push(n);
   try{ localStorage.setItem('donerFriends', JSON.stringify(list)); }catch(e){}
+  getOrCreateFriendAcct(n);
   $('frIn').value = '';
   renderFriends();
-  flash(`${n} arkadaş listesine eklendi`, '#4ade80');
+  flash(`${n} eklendi (🟢 Aktif — Hesaba girebilirsin)`, '#4ade80');
 };
 window.addEventListener('keydown', e => {
   if(e.key === 'Escape') togglePause();
@@ -2672,6 +2854,7 @@ $('home').onclick = () => {
 // (düğme para panelinin içinde; panel her yenilendiğinde tıklama panelden yakalanır)
 $('stats').addEventListener('click', e => {
   if(e.target && e.target.id === 'eat') eatFood();
+  if(e.target && e.target.id === 'backMyAcct') returnToMyAccount();
   if(e.target && e.target.closest && e.target.closest('#lvlBtn')) openLevel();
 });
 // seviye penceresi: seviye, sonraki seviye ve hediyeler
@@ -5538,7 +5721,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-200627';
+const APP_VERSION = '2026-10-22-201845';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
