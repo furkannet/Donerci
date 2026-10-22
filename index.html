@@ -532,14 +532,11 @@ function load(){
   return JSON.parse(JSON.stringify(DEF));
 }
 const NTFY_RELAYS = [
-  'https://ntfy.envs.net/doner_sim_furkannet_online_v1',
-  'https://ntfy.adminforge.de/doner_sim_furkannet_online_v1'
+  'https://ntfy.envs.net/doner_sim_furkannet_online_v1'
 ];
 function postToRelays(pkt){
   const body = JSON.stringify(pkt);
-  NTFY_RELAYS.forEach(url => {
-    try{ fetch(url, {method: 'POST', body}).catch(() => {}); }catch(e){}
-  });
+  try{ fetch(NTFY_RELAYS[0], {method: 'POST', body, keepalive: true}).catch(() => {}); }catch(e){}
 }
 function broadcastAcctState(userName, stateObj, force){
   if(!userName) return;
@@ -2747,10 +2744,13 @@ function broadcastCoopPos(force){
   const wp = getMyWorldPos();
   const moved = Math.hypot(wp.x - lastBroadX, wp.z - lastBroadZ) > 0.05 || Math.abs(wp.yaw - lastBroadYaw) > 0.1;
   const currentRoom = activeFriendAcct || myName;
-  const pkt = {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, look: S.look, state: force ? {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk} : {level: S.level, money: S.money, look: S.look}, ts: Date.now()};
-  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const now = Date.now();
-  const minInterval = moved ? 300 : 2500;
+  // Yürürken sadece hafif konum paketi gönder (kasmayı önler), dururken veya ilk girişte tam durum gönder
+  const pkt = force
+    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
+    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, ts: now};
+  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+  const minInterval = moved ? 350 : 3000;
   if(!force && now - lastCoopBroadcast < minInterval) return;
   lastCoopBroadcast = now;
   lastBroadX = wp.x; lastBroadZ = wp.z; lastBroadYaw = wp.yaw;
@@ -2895,21 +2895,25 @@ function connectOnlineWS(){
   window.addEventListener('focus', () => { broadcastCoopPos(true); pollOnlineStatus(false); });
   document.addEventListener('visibilitychange', () => { if(!document.hidden){ broadcastCoopPos(true); pollOnlineStatus(false); } });
 })();
+let lastPeerAutoCheck = 0;
 function updateFriendCompanion(dt){
-  if(activeFriendAcct && !roomPeers[activeFriendAcct.toLowerCase()]){
-    spawnFriendCompanion(activeFriendAcct);
-  }
-  // Arkadaş listemizdeki aktif/çevrimiçi oyuncuları da haritada otomatik göster
-  getFriends().forEach(fn => {
-    const fk = fn.toLowerCase();
-    if(!roomPeers[fk] && onlineFriends[fk] && isFriendActive(fn)){
-      spawnRoomPeer(fn, onlineFriends[fk].x, onlineFriends[fk].z, onlineFriends[fk].yaw);
+  const now = Date.now();
+  if(now - lastPeerAutoCheck > 1500){
+    lastPeerAutoCheck = now;
+    if(activeFriendAcct && !roomPeers[activeFriendAcct.toLowerCase()]){
+      spawnFriendCompanion(activeFriendAcct);
     }
-  });
+    // Arkadaş listemizdeki aktif/çevrimiçi oyuncuları da haritada otomatik göster
+    getFriends().forEach(fn => {
+      const fk = fn.toLowerCase();
+      if(!roomPeers[fk] && onlineFriends[fk] && isFriendActive(fn)){
+        spawnRoomPeer(fn, onlineFriends[fk].x, onlineFriends[fk].z, onlineFriends[fk].yaw);
+      }
+    });
+  }
   const keys = Object.keys(roomPeers);
   // Kendi konumumuzu da sürekli yayınla ki arkadaşlarımız da bizi hareket ederken görsün
   broadcastCoopPos(false);
-  const now = Date.now();
   for(const k of keys){
     const fc = roomPeers[k];
     if(!fc || !fc.g) continue;
@@ -2920,29 +2924,37 @@ function updateFriendCompanion(dt){
       if(typeof onlineFriends[k].yaw === 'number') fc.targetYaw = onlineFriends[k].yaw;
     }
     // Uzun süre bağlantı kesilirse ve arkadaşımız değilse kaldır
-    const isFr = getFriends().some(x => x.toLowerCase() === k);
-    if(!isFr && (!activeFriendAcct || activeFriendAcct.toLowerCase() !== k) && (now - fc.liveTs > 70000)){
+    if((!activeFriendAcct || activeFriendAcct.toLowerCase() !== k) && (now - fc.liveTs > 70000) && !onlineFriends[k]){
       removeRoomPeer(fc.name);
       renderAll();
       continue;
     }
-    // BOT YOK: Yalnızca gerçek oyuncudan gelen canlı konum verisine göre hareket eder
+    // BOT YOK: Yalnızca gerçek oyuncudan gelen canlı konum verisine göre yürüyerek (teleport olmadan) hareket eder
     const dx = fc.tx - fc.x, dz = fc.tz - fc.z;
     const dist = Math.hypot(dx, dz);
-    if(dist > 25){
-      fc.x = fc.tx; fc.z = fc.tz;
-    } else if(dist > 0.04){
-      const stepSp = Math.min(dist, Math.max(5.2, dist * 7) * dt);
+    if(dist > 0.03){
+      const walkSp = Math.min(8.5, Math.max(4.6, dist * 3.2));
+      const stepSp = Math.min(dist, walkSp * dt);
       fc.x += (dx / dist) * stepSp;
       fc.z += (dz / dist) * stepSp;
-      fc.yaw = Math.atan2(dx, dz);
-      fc.ph += dt * 10;
+      const targetWalkYaw = Math.atan2(dx, dz);
+      let dYaw = targetWalkYaw - fc.yaw;
+      while(dYaw > Math.PI) dYaw -= Math.PI * 2;
+      while(dYaw < -Math.PI) dYaw += Math.PI * 2;
+      fc.yaw += dYaw * Math.min(1, dt * 12);
+      fc.ph += dt * (walkSp * 1.8);
       legPose(fc.legL, Math.sin(fc.ph) * 0.6);
       legPose(fc.legR, -Math.sin(fc.ph) * 0.6);
       if(fc.armL) fc.armL.rotation.x = -Math.sin(fc.ph) * 0.45;
       if(fc.armR) fc.armR.rotation.x = Math.sin(fc.ph) * 0.45;
     } else {
-      if(typeof fc.targetYaw === 'number') fc.yaw = fc.targetYaw + Math.PI;
+      if(typeof fc.targetYaw === 'number'){
+        const endYaw = fc.targetYaw + Math.PI;
+        let dYaw = endYaw - fc.yaw;
+        while(dYaw > Math.PI) dYaw -= Math.PI * 2;
+        while(dYaw < -Math.PI) dYaw += Math.PI * 2;
+        fc.yaw += dYaw * Math.min(1, dt * 10);
+      }
       legPose(fc.legL, 0);
       legPose(fc.legR, 0);
       if(fc.armL) fc.armL.rotation.x = 0;
@@ -6245,7 +6257,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-222338';
+const APP_VERSION = '2026-10-22-223450';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
