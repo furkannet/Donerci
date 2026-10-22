@@ -348,6 +348,16 @@ button small{font-size:9px;margin-top:0}
     <button id="pauseResume" class="wide">▶ Devam</button>
   </div>
 </div>
+<div id="frDelModal" class="modal" style="z-index:25">
+  <div class="card" style="text-align:center;max-width:340px">
+    <h2>Emin misin?</h2>
+    <p id="frDelText"></p>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="frDelYes" class="wide" style="margin:0;background:#b91c1c;border-color:transparent">Evet, Sil</button>
+      <button id="frDelNo" class="wide" style="margin:0">İptal</button>
+    </div>
+  </div>
+</div>
 <div id="prof" class="modal">
   <div class="card">
     <h2>Profil</h2>
@@ -2895,12 +2905,20 @@ function renderFriends(){
     del.textContent = 'Sil';
     del.style.cssText = 'padding:5px 8px;font-size:12px;background:#4a1e1e';
     del.onclick = () => {
-      if(inThis) returnToMyAccount();
-      const rest = getFriends().filter(x => x !== n);
-      try{ localStorage.setItem('donerFriends', JSON.stringify(rest)); }catch(e){}
-      broadcastFriendEvent('friend_del', n);
-      renderFriends();
-      flash(`${n} arkadaşlıktan çıkarıldı`, '#ffd54a');
+      $('frDelText').innerHTML = `<b>${n}</b> adlı arkadaşı silmek istediğine emin misin?`;
+      $('frDelModal').style.display = 'flex';
+      $('frDelYes').onclick = () => {
+        $('frDelModal').style.display = 'none';
+        if(inThis) returnToMyAccount();
+        const rest = getFriends().filter(x => x !== n);
+        try{ localStorage.setItem('donerFriends', JSON.stringify(rest)); }catch(e){}
+        broadcastFriendEvent('friend_del', n);
+        renderFriends();
+        flash(`${n} arkadaşlıktan çıkarıldı`, '#ffd54a');
+      };
+      $('frDelNo').onclick = () => {
+        $('frDelModal').style.display = 'none';
+      };
     };
     actions.appendChild(del);
     row.appendChild(info);
@@ -6030,7 +6048,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-210856';
+const APP_VERSION = '2026-10-22-211045';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
