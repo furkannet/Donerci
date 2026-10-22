@@ -2536,7 +2536,7 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent){
   knownPlayers[k] = {user, state: st};
   try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
   const prevTs = (onlineFriends[k] && onlineFriends[k].ts) || 0;
-  const newTs = isRecent ? Date.now() : prevTs;
+  const newTs = isRecent ? Date.now() : (prevTs || Date.now());
   onlineFriends[k] = {
     user,
     state: st,
@@ -2903,7 +2903,16 @@ function updateFriendCompanion(dt){
 function getFriends(){ try{ return JSON.parse(localStorage.getItem('donerFriends') || '[]'); }catch(e){ return []; } }
 function isFriendActive(name){
   const k = name.toLowerCase();
-  return !!(onlineFriends[k] && onlineFriends[k].ts && (Date.now() - onlineFriends[k].ts < 120000));
+  if(onlineFriends[k] && onlineFriends[k].ts && (Date.now() - onlineFriends[k].ts < 600000)) return true;
+  if(knownPlayers[k]) return true;
+  try{
+    const saved = localStorage.getItem('donerAcct_' + k);
+    if(saved){
+      const parsed = JSON.parse(saved);
+      if(parsed && parsed.realAccount === true) return true;
+    }
+  }catch(e){}
+  return false;
 }
 function buildLeaderboardEntries(){
   const map = {};
@@ -2945,14 +2954,17 @@ function renderLeaderboardHTML(entries){
   return entries.map((e, i) => {
     const rank = i + 1;
     const medal = rank === 1 ? '🥇 1.' : rank === 2 ? '🥈 2.' : rank === 3 ? '🥉 3.' : `${rank}.`;
-    const bg = rank === 1 ? 'rgba(255,176,32,.18)' : (e.isMe ? 'rgba(74,222,128,.12)' : 'rgba(255,255,255,.05)');
-    const border = rank === 1 ? '#ffb020' : (e.isMe ? '#4ade80' : 'var(--line)');
+    const bg = rank === 1 ? 'rgba(255,176,32,.18)' : (e.online ? 'rgba(74,222,128,.12)' : 'rgba(255,255,255,.05)');
+    const border = rank === 1 ? '#ffb020' : (e.online ? '#4ade80' : 'var(--line)');
+    const badge = e.online
+      ? `<span style="padding:3px 7px;border-radius:6px;font-size:11px;font-weight:700;background:#16a34a;color:#fff;margin-right:6px">🟢 Çevrimiçi</span>`
+      : `<span style="padding:3px 7px;border-radius:6px;font-size:11px;font-weight:700;background:#222b38;color:#9ca3af;margin-right:6px">⚫ Çevrimdışı</span>`;
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:5px;padding:7px 10px;border-radius:8px;background:${bg};border:1px solid ${border}">` +
       `<div><b style="color:${rank === 1 ? '#ffd54a' : 'var(--ink)'};margin-right:6px">${medal}</b>` +
-      `<span style="color:${e.online ? '#4ade80' : '#9ca3af'}">●</span> <b>${e.user}</b>${e.isMe ? ' <small style="color:#4ade80">(Sen)</small>' : ''} ` +
-      `<small style="color:${e.online ? '#4ade80' : '#9ca3af'};font-weight:600">${e.online ? '🟢 Çevrimiçi (Şu an oynuyor)' : 'Çevrimdışı'}</small> ` +
+      `<span style="color:${e.online ? '#4ade80' : '#9ca3af'}">●</span> <b>${e.user}</b>${e.isMe ? ' <small style="color:#4ade80;font-weight:700">(Sen)</small>' : ''} ` +
+      `<small style="color:${e.online ? '#4ade80' : '#9ca3af'};font-weight:700">${e.online ? '· 🟢 Çevrimiçi (Şu an oynuyor)' : '· Çevrimdışı'}</small> ` +
       `<small style="color:var(--mut)">· Sv.${e.level}</small></div>` +
-      `<b style="color:#ffd54a">${e.money.toLocaleString('tr-TR')}₺</b></div>`;
+      `<div style="display:flex;align-items:center">${badge}<b style="color:#ffd54a">${e.money.toLocaleString('tr-TR')}₺</b></div></div>`;
   }).join('');
 }
 function renderLeaderboard(){
@@ -6180,7 +6192,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-213710';
+const APP_VERSION = '2026-10-22-214102';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
