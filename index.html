@@ -2485,6 +2485,7 @@ function togglePause(){
   $('pause').style.display = escPaused ? 'flex' : 'none';
   if(escPaused){
     broadcastCoopPos(true);
+    requestOnlinePing();
     pollOnlineStatus();
     renderFriends();
   }
@@ -2586,6 +2587,7 @@ function broadcastFriendEvent(type, toUser){
   }catch(e){}
 }
 async function checkPlayerExistsAsync(name){
+  requestOnlinePing();
   await pollOnlineStatus();
   return doesPlayerExist(name);
 }
@@ -2705,6 +2707,22 @@ function returnToMyAccount(){
   flash(`↩ Kendi haritana döndün (${prev} haritasından çıkıldı)`, '#7dd3fc');
 }
 let lastCoopBroadcast = 0;
+let lastPingSent = 0;
+function requestOnlinePing(){
+  const now = Date.now();
+  if(now - lastPingSent < 2000) return;
+  lastPingSent = now;
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
+  if(!myName) return;
+  const pkt = {type: 'ping', user: myName, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
+  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+  try{
+    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
+      method: 'POST',
+      body: JSON.stringify(pkt)
+    }).catch(() => {});
+  }catch(e){}
+}
 function broadcastCoopPos(force){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user);
   if(!myName) return;
@@ -2729,6 +2747,9 @@ function handleIncomingCoopMsg(msg){
   const k = String(msg.user).toLowerCase();
   const wasOnline = isFriendActive(msg.user);
   registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
+  if(msg.type === 'ping'){
+    broadcastCoopPos(true);
+  }
   if(!wasOnline && getFriends().some(x => x.toLowerCase() === k)){
     flash(`🟢 ${msg.user} çevrimiçi oldu!`, '#4ade80');
   }
@@ -2767,34 +2788,33 @@ function handleIncomingCoopMsg(msg){
 if(coopChan){ coopChan.onmessage = ev => handleIncomingCoopMsg(ev.data); }
 async function pollOnlineStatus(){
   try{
-    const [rAll, rRecent] = await Promise.all([
-      fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h').catch(() => null),
-      fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=90s').catch(() => null)
-    ]);
+    const rAll = await fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h').catch(() => null);
     if(rAll && rAll.ok){
       const text = await rAll.text();
-      text.split('\n').forEach(line => {
-        if(!line.trim()) return;
+      const lines = text.split('\n').filter(l => l.trim());
+      let refSec = 0;
+      const dateHdr = rAll.headers && rAll.headers.get('date');
+      if(dateHdr){
+        const parsed = Date.parse(dateHdr);
+        if(!isNaN(parsed)) refSec = Math.floor(parsed / 1000);
+      }
+      const parsedItems = [];
+      lines.forEach(line => {
         try{
           const outer = JSON.parse(line);
           if(outer && outer.message){
-            const msg = JSON.parse(outer.message);
-            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, false);
-            if(msg && (msg.type === 'friend_add' || msg.type === 'friend_del')) handleFriendEvent(msg);
+            if(typeof outer.time === 'number' && outer.time > refSec) refSec = outer.time;
+            parsedItems.push(outer);
           }
         }catch(e){}
       });
-    }
-    if(rRecent && rRecent.ok){
-      const text = await rRecent.text();
-      text.split('\n').forEach(line => {
-        if(!line.trim()) return;
+      parsedItems.forEach(outer => {
         try{
-          const outer = JSON.parse(line);
-          if(outer && outer.message){
-            const msg = JSON.parse(outer.message);
-            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
-          }
+          const msg = JSON.parse(outer.message);
+          if(!msg) return;
+          const isRecent = (typeof outer.time === 'number' && refSec > 0) ? ((refSec - outer.time) <= 150) : true;
+          if(msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, isRecent);
+          if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
         }catch(e){}
       });
     }
@@ -2924,6 +2944,7 @@ function renderLeaderboardHTML(entries){
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:5px;padding:7px 10px;border-radius:8px;background:${bg};border:1px solid ${border}">` +
       `<div><b style="color:${rank === 1 ? '#ffd54a' : 'var(--ink)'};margin-right:6px">${medal}</b>` +
       `<span style="color:${e.online ? '#4ade80' : '#9ca3af'}">●</span> <b>${e.user}</b>${e.isMe ? ' <small style="color:#4ade80">(Sen)</small>' : ''} ` +
+      `<small style="color:${e.online ? '#4ade80' : '#9ca3af'};font-weight:600">${e.online ? '🟢 Çevrimiçi (Şu an oynuyor)' : 'Çevrimdışı'}</small> ` +
       `<small style="color:var(--mut)">· Sv.${e.level}</small></div>` +
       `<b style="color:#ffd54a">${e.money.toLocaleString('tr-TR')}₺</b></div>`;
   }).join('');
@@ -2936,6 +2957,7 @@ function renderLeaderboard(){
 }
 $('leadBtn').onclick = () => {
   broadcastCoopPos(true);
+  requestOnlinePing();
   pollOnlineStatus();
   renderLeaderboard();
   setOpen = true;
@@ -2964,18 +2986,29 @@ function renderFriends(){
   const list = getFriends();
   const box = $('frBody');
   box.innerHTML = '';
-  if(!list.length){ box.innerHTML = '<i style="color:var(--mut)">Henüz arkadaş yok. Yukarıdan arkadaş ekle!</i>'; }
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Sen';
+  const meRow = document.createElement('div');
+  meRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;padding:6px 8px;border-radius:8px;background:rgba(74,222,128,.12);border:1px solid #4ade80';
+  meRow.innerHTML = `<div><span style="color:#4ade80">●</span> <b>${myName}</b> <small style="color:#4ade80;font-weight:700">(Sen) · 🟢 Çevrimiçi (Şu an oynuyor)</small>` +
+    `<br><small style="color:var(--mut)">Seviye ${S.level || 1} · ${(S.money || 0).toLocaleString('tr-TR')}₺</small></div>` +
+    `<span style="padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#16a34a;color:#fff">🟢 Çevrimiçi</span>`;
+  box.appendChild(meRow);
+  if(!list.length){
+    const emptyMsg = document.createElement('div');
+    emptyMsg.innerHTML = '<i style="color:var(--mut)">Henüz arkadaş yok. Yukarıdan arkadaş ekle!</i>';
+    box.appendChild(emptyMsg);
+  }
   list.forEach(n => {
     const exists = doesPlayerExist(n);
     const acct = getOrCreateFriendAcct(n);
     const isAct = isFriendActive(n);
     const inThis = activeFriendAcct && activeFriendAcct.toLowerCase() === n.toLowerCase();
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--line)';
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;border-radius:8px;background:' + (isAct ? 'rgba(74,222,128,.08)' : 'rgba(255,255,255,.05)') + ';border:1px solid ' + (isAct ? '#4ade80' : 'var(--line)');
     const info = document.createElement('div');
-    const statusText = !exists ? 'Öyle bir oyuncu yok' : (isAct ? 'Çevrimiçi (Oyunda)' : 'Çevrimdışı');
+    const statusText = !exists ? 'Öyle bir oyuncu yok' : (isAct ? '🟢 Çevrimiçi (Şu an oynuyor)' : 'Çevrimdışı');
     const statusCol = !exists ? '#f87171' : (isAct ? '#4ade80' : '#9ca3af');
-    info.innerHTML = `<div><span style="color:${statusCol}">●</span> <b>${n}</b> <small style="color:${statusCol}">${statusText}</small></div>` +
+    info.innerHTML = `<div><span style="color:${statusCol}">●</span> <b>${n}</b> <small style="color:${statusCol};font-weight:700">${statusText}</small></div>` +
       (exists ? `<small style="color:var(--mut)">Seviye ${acct.level || 1} · ${(acct.money || 0).toLocaleString('tr-TR')}₺</small>` : '');
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:4px;align-items:center';
@@ -6135,7 +6168,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-212105';
+const APP_VERSION = '2026-10-22-212441';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
