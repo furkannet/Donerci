@@ -337,7 +337,7 @@ button small{font-size:9px;margin-top:0}
 <div id="pause" class="modal">
   <div class="card" style="text-align:center">
     <h2>Oyun Durdu / Arkadaşlar</h2>
-    <p>Aktif arkadaşının yanına gidip birlikte oynayabilirsin.</p>
+    <p>Hesabına girmeden arkadaşının haritasına girebilir, onun haritasında birlikte oynayabilirsin.</p>
     <div id="acctBanner" style="display:none;margin:8px 0;padding:8px;border-radius:8px;background:rgba(74,222,128,.15);border:1px solid #4ade80;font-size:13px"></div>
     <h3>Arkadaşlar</h3>
     <input id="frIn" list="frList" maxlength="16" placeholder="Arkadaş adı yaz" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:#222b38;color:var(--ink)">
@@ -483,7 +483,9 @@ const DEF = {
   car:null,
   seen:false
 };
-let activeFriendAcct = null; // aktif arkadaş hesabındaysak arkadaşın adı, kendi hesabımızdaysak null
+let activeFriendAcct = null; // aktif arkadaşın haritasındaysak arkadaşın adı, kendi haritamızdaysak null
+let activeFriendMapState = null; // arkadaşın haritasının eşya/araba durumu
+let friendMapCarMesh = null; // arkadaşın haritasındaki park halindeki arabası
 let lastNetSync = 0;
 const onlineFriends = {}; // { [lowerName]: { user, state, ts } }
 function normalizeState(o){
@@ -2165,7 +2167,7 @@ function renderStats(){
   const hearts = '❤'.repeat(Math.max(0, can)) + '♡'.repeat(Math.max(0, MAX_LIVES - can));
   $('stats').innerHTML =
     (activeFriendAcct
-      ? `<div style="margin-bottom:2px;color:#4ade80">🟢 <b>${activeFriendAcct}</b> ile oynuyorsun <button id="backMyAcct" style="padding:1px 5px;font-size:9px;background:#1e3a52;border-color:#4ade80;margin-left:2px">↩ Ayrıl</button></div>`
+      ? `<div style="margin-bottom:2px;color:#4ade80">🗺 <b>${activeFriendAcct}</b> Haritası <button id="backMyAcct" style="padding:1px 5px;font-size:9px;background:#1e3a52;border-color:#4ade80;margin-left:2px">↩ Kendi Haritana Dön</button></div>`
       : '') +
     (S.settings.name ? `<b>${S.settings.name}</b><br>` : '') +
     `<span id="lvlBtn" style="cursor:pointer;text-decoration:underline">Seviye <b>${S.level || 1}</b> <small>(${Math.max(0, xpFor((S.level || 1) + 1) - (S.xp || 0)).toLocaleString('tr-TR')}₺ kaldı)</small></span> · Gün <b>${S.day}</b> · ${m}:${String(s).padStart(2,'0')}<br>` +
@@ -2231,21 +2233,25 @@ function renderButtons(){
 }
 
 function renderStall(){
-  fryer.visible = S.unlock.fritoz;
-  fridge.visible = S.unlock.buzdolabi;
-  tray.visible = S.unlock.porsiyon;
-  worker.visible = !!S.kar.staff;
-  pcGroup.visible = !!S.mk.pc;
+  const ms = activeFriendMapState;
+  const u = ms && ms.unlock ? ms.unlock : S.unlock;
+  const k = ms && ms.kar ? ms.kar : S.kar;
+  const m = ms && ms.mk ? ms.mk : S.mk;
+  fryer.visible = !!(u.fritoz || S.unlock.fritoz);
+  fridge.visible = !!(u.buzdolabi || S.unlock.buzdolabi);
+  tray.visible = !!(u.porsiyon || S.unlock.porsiyon);
+  worker.visible = !!(k.staff || S.kar.staff);
+  pcGroup.visible = !!(m.pc || S.mk.pc);
   toysGroup.visible = false; // bahçedeki oyuncaklar kaldırıldı
-  garajGroup.visible = !!S.mk.garaj;
-  guardMesh.visible = !!S.mk.guard;
-  dogMesh.visible = !!S.mk.guard;
-  klimaUnit.visible = !!S.mk.klima;
+  garajGroup.visible = !!(m.garaj || S.mk.garaj);
+  guardMesh.visible = !!(m.guard || S.mk.guard);
+  dogMesh.visible = !!(m.guard || S.mk.guard);
+  klimaUnit.visible = !!(m.klima || S.mk.klima);
   comoTruck.visible = true; // dükkân her zaman görünür (satın alınca gelir)
-  comoStaffMesh.visible = !!S.mk.comoStaff;
+  comoStaffMesh.visible = !!(m.comoStaff || S.mk.comoStaff);
   cigCart.visible = false;
-  securityCam.visible = !!S.mk.cam;
-  $('tablet').style.display = S.mk.cam ? 'block' : 'none';
+  securityCam.visible = !!(m.cam || S.mk.cam);
+  $('tablet').style.display = (m.cam || S.mk.cam) ? 'block' : 'none';
 }
 
 function renderFuture(){
@@ -2517,8 +2523,26 @@ function getOrCreateFriendAcct(name){
     skin: '#f1c27d',
     hair: '#1b1b1b'
   };
+  const carIds = ['sedan', 'spor', 'taksi', 'tofas', 'luks'];
+  st.car = carIds[h % carIds.length];
+  st.unlock.buzdolabi = true;
+  if(h % 2 === 0) st.unlock.fritoz = true;
+  if(h % 3 === 0) st.unlock.porsiyon = true;
+  st.mk.garaj = true;
+  if(h % 2 === 0) st.mk.guard = true;
+  if(h % 3 === 0) st.mk.pc = true;
   try{ localStorage.setItem(key, JSON.stringify(st)); }catch(e){}
   return st;
+}
+function spawnFriendMapCar(st){
+  if(friendMapCarMesh){ scene.remove(friendMapCarMesh); friendMapCarMesh = null; }
+  if(!st || !st.car) return;
+  const def = CARS.find(c => c.id === st.car);
+  if(!def) return;
+  friendMapCarMesh = car((st.mods && st.mods.paint) || def.color, def.type);
+  friendMapCarMesh.position.set(-6.5, 0, -24);
+  friendMapCarMesh.rotation.y = Math.PI;
+  scene.add(friendMapCarMesh);
 }
 function spawnFriendCompanion(name, startX, startZ){
   if(friendComp && friendComp.g) scene.remove(friendComp.g);
@@ -2543,8 +2567,10 @@ function enterFriendAccount(name){
   const fx = (on && typeof on.x === 'number') ? on.x : (D.x - 2.0);
   const fz = (on && typeof on.z === 'number') ? on.z : (D.z - 1.2);
   activeFriendAcct = name;
+  activeFriendMapState = getOrCreateFriendAcct(name);
   spawnFriendCompanion(name, fx, fz);
-  // Oyuncuyu arkadaşının hemen yanına ışınla ve yüzünü ona döndür
+  spawnFriendMapCar(activeFriendMapState);
+  // Kendi hesabında kalarak arkadaşının haritasına ışınlan
   if(!C.driving && !D.driving && !CM.driving){
     P.x = fx - 1.3;
     P.z = fz + 0.6;
@@ -2553,23 +2579,25 @@ function enterFriendAccount(name){
   broadcastCoopPos(true);
   if(escPaused) togglePause();
   renderAll();
-  flash(`🎮 ${name} yanına geldin! Birlikte oynuyorsunuz`, '#4ade80');
+  flash(`🗺 ${name} haritasına girdin! (Kendi hesabındasın)`, '#4ade80');
 }
 function returnToMyAccount(){
   if(!activeFriendAcct) return;
   const prev = activeFriendAcct;
   activeFriendAcct = null;
+  activeFriendMapState = null;
   if(friendComp && friendComp.g) scene.remove(friendComp.g);
   friendComp = null;
+  if(friendMapCarMesh){ scene.remove(friendMapCarMesh); friendMapCarMesh = null; }
   renderAll();
   if(escPaused) renderFriends();
-  flash(`↩ ${prev} yanından ayrıldın`, '#7dd3fc');
+  flash(`↩ Kendi haritana döndün (${prev} haritasından çıkıldı)`, '#7dd3fc');
 }
 let lastCoopBroadcast = 0;
 function broadcastCoopPos(force){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user);
   if(!myName) return;
-  const pkt = {type: 'pos', user: myName, target: activeFriendAcct || '', x: P.x, z: P.z, yaw: P.yaw, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look}, ts: Date.now()};
+  const pkt = {type: 'pos', user: myName, target: activeFriendAcct || '', x: P.x, z: P.z, yaw: P.yaw, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const now = Date.now();
   if(!force && now - lastCoopBroadcast < 2500) return;
@@ -2594,12 +2622,12 @@ function handleIncomingCoopMsg(msg){
     yaw: msg.yaw || 0,
     ts: Date.now()
   };
-  // Eğer o arkadaşımız bizim yanımıza katılmışsa ve biz henüz kimseyle değilsek onu dünyada göster
+  // Eğer o arkadaşımız bizim haritamıza katılmışsa onu kendi haritamızda göster
   if(msg.target && myName && msg.target.toLowerCase() === myName.toLowerCase() && !activeFriendAcct){
     activeFriendAcct = msg.user;
     spawnFriendCompanion(msg.user, onlineFriends[k].x, onlineFriends[k].z);
     renderAll();
-    flash(`🎮 ${msg.user} yanına geldi! Birlikte oynuyorsunuz`, '#4ade80');
+    flash(`🗺 ${msg.user} senin haritana katıldı!`, '#4ade80');
   }
   if(friendComp && friendComp.name.toLowerCase() === k && typeof msg.x === 'number'){
     friendComp.tx = msg.x;
@@ -2704,7 +2732,7 @@ function renderFriends(){
   if(banner){
     if(activeFriendAcct){
       banner.style.display = 'block';
-      banner.innerHTML = `🟢 Şu an <b>${activeFriendAcct}</b> ile birlikte oynuyorsun <button id="bannerBackBtn" style="margin-left:8px;padding:4px 10px;font-size:12px;background:#1e3a52;border-color:#4ade80">↩ Yanından Ayrıl</button>`;
+      banner.innerHTML = `🗺 Şu an <b>${activeFriendAcct}</b> haritasındasın <small>(kendi hesabınla)</small> <button id="bannerBackBtn" style="margin-left:8px;padding:4px 10px;font-size:12px;background:#1e3a52;border-color:#4ade80">↩ Kendi Haritana Dön</button>`;
       const bb = $('bannerBackBtn');
       if(bb) bb.onclick = returnToMyAccount;
     } else {
@@ -2722,13 +2750,13 @@ function renderFriends(){
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--line)';
     const info = document.createElement('div');
-    info.innerHTML = `<div><span style="color:${isAct ? '#4ade80' : '#9ca3af'}">●</span> <b>${n}</b> <small style="color:${isAct ? '#4ade80' : 'var(--mut)'}">${isAct ? 'Aktif (Oyunda)' : 'Çevrimdışı'}</small></div>` +
+    info.innerHTML = `<div><span style="color:${isAct ? '#4ade80' : '#9ca3af'}">●</span> <b>${n}</b> <small style="color:${isAct ? '#4ade80' : 'var(--mut)'}">${isAct ? 'Haritası Açık' : 'Çevrimdışı'}</small></div>` +
       `<small style="color:var(--mut)">Seviye ${acct.level || 1} · ${(acct.money || 0).toLocaleString('tr-TR')}₺</small>`;
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:4px;align-items:center';
     if(isAct){
       const enterBtn = document.createElement('button');
-      enterBtn.textContent = inThis ? '✓ Yanındasın' : '🎮 Yanına Git';
+      enterBtn.textContent = inThis ? '✓ Haritasındasın' : '🗺 Haritasına Gir';
       enterBtn.disabled = !!inThis;
       enterBtn.style.cssText = 'padding:5px 8px;font-size:12px;font-weight:600;background:' + (inThis ? '#222b38' : '#16a34a') + ';border-color:transparent';
       enterBtn.onclick = () => enterFriendAccount(n);
@@ -2761,7 +2789,7 @@ $('frAdd').onclick = () => {
   getOrCreateFriendAcct(n);
   $('frIn').value = '';
   renderFriends();
-  flash(`${n} eklendi (🟢 Aktif — Yanına gidebilirsin!)`, '#4ade80');
+  flash(`${n} eklendi (🗺 Haritasına girebilirsin!)`, '#4ade80');
 };
 window.addEventListener('keydown', e => {
   if(e.key === 'Escape') togglePause();
@@ -5845,7 +5873,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-203458';
+const APP_VERSION = '2026-10-22-204140';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
