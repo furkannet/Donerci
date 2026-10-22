@@ -2179,11 +2179,12 @@ function renderStats(){
   const goal = goalFor(S.day);
   const hearts = '❤'.repeat(Math.max(0, can)) + '♡'.repeat(Math.max(0, MAX_LIVES - can));
   const peerNames = Object.values(roomPeers).map(p => p.name);
+  const myDisplayName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   $('stats').innerHTML =
     (activeFriendAcct
       ? `<div style="margin-bottom:2px;color:#4ade80">🗺 <b>${activeFriendAcct}</b> Haritası <button id="backMyAcct" style="padding:1px 5px;font-size:9px;background:#1e3a52;border-color:#4ade80;margin-left:2px">↩ Kendi Haritana Dön</button></div>`
       : (peerNames.length ? `<div style="margin-bottom:2px;color:#4ade80">🟢 Odadakiler: <b>${peerNames.join(', ')}</b></div>` : '')) +
-    (S.settings.name ? `<b>${S.settings.name}</b><br>` : '') +
+    (myDisplayName ? `<b>${myDisplayName}</b> <small style="color:#4ade80">● Çevrimiçi</small><br>` : '') +
     `<span id="lvlBtn" style="cursor:pointer;text-decoration:underline">Seviye <b>${S.level || 1}</b> <small>(${Math.max(0, xpFor((S.level || 1) + 1) - (S.xp || 0)).toLocaleString('tr-TR')}₺ kaldı)</small></span> · Gün <b>${S.day}</b> · ${m}:${String(s).padStart(2,'0')}<br>` +
     (() => { const lv = S.level || 1, lo = xpFor(lv), hi = xpFor(lv + 1); const pct = Math.min(100, Math.max(0, ((S.xp || 0) - lo) / (hi - lo) * 100)); return `<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:2px 0 4px">` + `<i style="display:block;height:100%;width:${pct}%;background:#ffd54a"></i></div>`; })() +
     `Kazanç <b>${shiftEarned}</b>₺<br>` +
@@ -2508,7 +2509,7 @@ function makeNameSprite(text){
   return sp;
 }
 const knownPlayers = {}; // sunucudan / ağdan bilinen tüm gerçek oyuncular
-function registerKnownPlayer(user, stateObj, x, z, yaw, msgTs){
+function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent){
   if(!user) return;
   const k = String(user).toLowerCase();
   const st = normalizeState(stateObj || (onlineFriends[k] && onlineFriends[k].state) || (knownPlayers[k] && knownPlayers[k].state) || DEF);
@@ -2517,14 +2518,14 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, msgTs){
   knownPlayers[k] = {user, state: st};
   try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
   const prevTs = (onlineFriends[k] && onlineFriends[k].ts) || 0;
-  const newTs = typeof msgTs === 'number' ? msgTs : prevTs;
+  const newTs = isRecent ? Date.now() : prevTs;
   onlineFriends[k] = {
     user,
     state: st,
     x: typeof x === 'number' ? x : ((onlineFriends[k] && onlineFriends[k].x) || (D.x - 2.0)),
     z: typeof z === 'number' ? z : ((onlineFriends[k] && onlineFriends[k].z) || (D.z - 1.2)),
     yaw: yaw || (onlineFriends[k] && onlineFriends[k].yaw) || 0,
-    ts: Math.max(prevTs, newTs)
+    ts: newTs
   };
 }
 function doesPlayerExist(name){
@@ -2574,24 +2575,7 @@ function broadcastFriendEvent(type, toUser){
   }catch(e){}
 }
 async function checkPlayerExistsAsync(name){
-  try{
-    const r = await fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h');
-    if(r.ok){
-      const text = await r.text();
-      text.split('\n').forEach(line => {
-        if(!line.trim()) return;
-        try{
-          const outer = JSON.parse(line);
-          if(outer && outer.message){
-            const msg = JSON.parse(outer.message);
-            const mTs = msg.ts || (outer.time ? outer.time * 1000 : 0);
-            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, mTs);
-            if(msg && (msg.type === 'friend_add' || msg.type === 'friend_del')) handleFriendEvent(msg);
-          }
-        }catch(e){}
-      });
-    }
-  }catch(e){}
+  await pollOnlineStatus();
   return doesPlayerExist(name);
 }
 function getOrCreateFriendAcct(name){
@@ -2726,14 +2710,14 @@ function broadcastCoopPos(force){
     }).catch(() => {});
   }catch(e){}
 }
-function handleIncomingCoopMsg(msg, serverTs){
+function handleIncomingCoopMsg(msg){
   if(!msg || !msg.user) return;
   if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(myName && msg.user.toLowerCase() === myName.toLowerCase()) return;
   const k = String(msg.user).toLowerCase();
   const wasOnline = isFriendActive(msg.user);
-  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, serverTs || Date.now());
+  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
   if(!wasOnline && getFriends().some(x => x.toLowerCase() === k)){
     flash(`🟢 ${msg.user} çevrimiçi oldu!`, '#4ade80');
   }
@@ -2769,23 +2753,40 @@ function handleIncomingCoopMsg(msg, serverTs){
   if(escPaused) renderFriends();
 }
 if(coopChan){ coopChan.onmessage = ev => handleIncomingCoopMsg(ev.data); }
-function pollOnlineStatus(){
+async function pollOnlineStatus(){
   try{
-    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h').then(r => r.text()).then(text => {
+    const [rAll, rRecent] = await Promise.all([
+      fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h').catch(() => null),
+      fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=90s').catch(() => null)
+    ]);
+    if(rAll && rAll.ok){
+      const text = await rAll.text();
       text.split('\n').forEach(line => {
         if(!line.trim()) return;
         try{
           const outer = JSON.parse(line);
           if(outer && outer.message){
             const msg = JSON.parse(outer.message);
-            const mTs = (outer.time ? outer.time * 1000 : 0) || msg.ts || 0;
-            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, mTs);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, false);
             if(msg && (msg.type === 'friend_add' || msg.type === 'friend_del')) handleFriendEvent(msg);
           }
         }catch(e){}
       });
-      if(escPaused) renderFriends();
-    }).catch(() => {});
+    }
+    if(rRecent && rRecent.ok){
+      const text = await rRecent.text();
+      text.split('\n').forEach(line => {
+        if(!line.trim()) return;
+        try{
+          const outer = JSON.parse(line);
+          if(outer && outer.message){
+            const msg = JSON.parse(outer.message);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
+          }
+        }catch(e){}
+      });
+    }
+    if(escPaused) renderFriends();
   }catch(e){}
 }
 function connectOnlineWS(){
@@ -2795,8 +2796,7 @@ function connectOnlineWS(){
       try{
         const outer = JSON.parse(ev.data);
         if(!outer || !outer.message) return;
-        const sTs = outer.time ? outer.time * 1000 : Date.now();
-        handleIncomingCoopMsg(JSON.parse(outer.message), sTs);
+        handleIncomingCoopMsg(JSON.parse(outer.message));
       }catch(e){}
     };
     ws.onclose = () => setTimeout(connectOnlineWS, 3000);
@@ -2805,9 +2805,10 @@ function connectOnlineWS(){
 (function initFriendsOnline(){
   pollOnlineStatus();
   connectOnlineWS();
-  setInterval(() => broadcastCoopPos(true), 6000);
-  setInterval(() => { if(escPaused) renderFriends(); }, 4000);
-  setTimeout(() => broadcastCoopPos(true), 300);
+  setInterval(() => broadcastCoopPos(true), 5000);
+  setInterval(() => pollOnlineStatus(), 8000);
+  setInterval(() => { if(escPaused) renderFriends(); }, 2500);
+  setTimeout(() => broadcastCoopPos(true), 200);
   window.addEventListener('focus', () => { broadcastCoopPos(true); pollOnlineStatus(); });
   document.addEventListener('visibilitychange', () => { if(!document.hidden){ broadcastCoopPos(true); pollOnlineStatus(); } });
 })();
@@ -6048,7 +6049,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-211045';
+const APP_VERSION = '2026-10-22-211601';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
