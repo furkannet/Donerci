@@ -342,7 +342,8 @@ button small{font-size:9px;margin-top:0}
     <h3>Arkadaşlar</h3>
     <input id="frIn" list="frList" maxlength="16" placeholder="Arkadaş adı yaz" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:#222b38;color:var(--ink)">
     <datalist id="frList"></datalist>
-    <button id="frAdd" class="wide" style="margin-top:6px">Ekle</button>
+    <div id="frMsg" style="color:var(--bad);min-height:18px;font-size:13px;margin-top:4px;font-weight:600"></div>
+    <button id="frAdd" class="wide" style="margin-top:4px">Ekle</button>
     <div id="frBody" style="text-align:left;font-size:14px;margin-top:8px"></div>
     <button id="pauseResume" class="wide">▶ Devam</button>
   </div>
@@ -525,6 +526,7 @@ function save(){
     localStorage.setItem(SAVE_KEY, JSON.stringify(S));
     const myName = (S.settings && S.settings.name) ? S.settings.name : '';
     if(myName){
+      S.realAccount = true;
       localStorage.setItem('donerAcct_' + myName.toLowerCase(), JSON.stringify(S));
       broadcastAcctState(myName, S, false);
     }
@@ -2489,12 +2491,26 @@ function makeNameSprite(text){
   sp.renderOrder = 10;
   return sp;
 }
+function doesPlayerExist(name){
+  const k = name.toLowerCase();
+  if(onlineFriends[k]) return true;
+  try{
+    const saved = localStorage.getItem('donerAcct_' + k);
+    if(saved){
+      const parsed = JSON.parse(saved);
+      if(parsed && parsed.realAccount) return true;
+    }
+  }catch(e){}
+  return false;
+}
 function getOrCreateFriendAcct(name){
   const key = 'donerAcct_' + name.toLowerCase();
   const online = onlineFriends[name.toLowerCase()];
   if(online && online.state){
     const st = normalizeState(online.state);
     st.settings.name = name;
+    st.realAccount = true;
+    try{ localStorage.setItem(key, JSON.stringify(st)); }catch(e){}
     return st;
   }
   try{
@@ -2505,33 +2521,8 @@ function getOrCreateFriendAcct(name){
       return st;
     }
   }catch(e){}
-  let h = 0;
-  for(let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
-  h = Math.abs(h);
   const st = normalizeState(DEF);
-  const lv = 2 + (h % 5);
-  st.level = lv;
-  st.xp = xpFor(lv) + (h % 600);
-  st.day = 1 + (h % 6);
-  st.money = 850 + (h % 9500);
   st.settings.name = name;
-  const shirts = ['#3a6ea5', '#c0392b', '#27ae60', '#f1c40f', '#8e44ad'];
-  const pants = ['#2a2a2a', '#2c3e50', '#4b3b2a', '#555555'];
-  st.look = {
-    shirt: shirts[h % shirts.length],
-    pants: pants[(h >> 2) % pants.length],
-    skin: '#f1c27d',
-    hair: '#1b1b1b'
-  };
-  const carIds = ['sedan', 'spor', 'taksi', 'tofas', 'luks'];
-  st.car = carIds[h % carIds.length];
-  st.unlock.buzdolabi = true;
-  if(h % 2 === 0) st.unlock.fritoz = true;
-  if(h % 3 === 0) st.unlock.porsiyon = true;
-  st.mk.garaj = true;
-  if(h % 2 === 0) st.mk.guard = true;
-  if(h % 3 === 0) st.mk.pc = true;
-  try{ localStorage.setItem(key, JSON.stringify(st)); }catch(e){}
   return st;
 }
 function spawnFriendMapCar(st){
@@ -2563,6 +2554,11 @@ function spawnFriendCompanion(name, startX, startZ){
   };
 }
 function enterFriendAccount(name){
+  if(!doesPlayerExist(name)){
+    if($('frMsg')){ $('frMsg').style.color = '#f87171'; $('frMsg').textContent = 'Öyle bir oyuncu yok!'; }
+    flash('Öyle bir oyuncu yok!', '#f87171');
+    return;
+  }
   const on = onlineFriends[name.toLowerCase()];
   const fx = (on && typeof on.x === 'number') ? on.x : (D.x - 2.0);
   const fz = (on && typeof on.z === 'number') ? on.z : (D.z - 1.2);
@@ -2614,9 +2610,13 @@ function handleIncomingCoopMsg(msg){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(myName && msg.user.toLowerCase() === myName.toLowerCase()) return;
   const k = String(msg.user).toLowerCase();
+  const st = normalizeState(msg.state || (onlineFriends[k] && onlineFriends[k].state) || DEF);
+  st.settings.name = msg.user;
+  st.realAccount = true;
+  try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
   onlineFriends[k] = {
     user: msg.user,
-    state: msg.state || (onlineFriends[k] && onlineFriends[k].state) || DEF,
+    state: st,
     x: typeof msg.x === 'number' ? msg.x : (D.x - 2.0),
     z: typeof msg.z === 'number' ? msg.z : (D.z - 1.2),
     yaw: msg.yaw || 0,
@@ -2723,9 +2723,7 @@ function updateFriendCompanion(dt){
 // arkadaş listesi (aktif arkadaşların yanına gidip birlikte oynanabilir)
 function getFriends(){ try{ return JSON.parse(localStorage.getItem('donerFriends') || '[]'); }catch(e){ return []; } }
 function isFriendActive(name){
-  const k = name.toLowerCase();
-  if(onlineFriends[k] && (Date.now() - onlineFriends[k].ts < 60000)) return true;
-  return true;
+  return doesPlayerExist(name);
 }
 function renderFriends(){
   const banner = $('acctBanner');
@@ -2750,8 +2748,8 @@ function renderFriends(){
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--line)';
     const info = document.createElement('div');
-    info.innerHTML = `<div><span style="color:${isAct ? '#4ade80' : '#9ca3af'}">●</span> <b>${n}</b> <small style="color:${isAct ? '#4ade80' : 'var(--mut)'}">${isAct ? 'Haritası Açık' : 'Çevrimdışı'}</small></div>` +
-      `<small style="color:var(--mut)">Seviye ${acct.level || 1} · ${(acct.money || 0).toLocaleString('tr-TR')}₺</small>`;
+    info.innerHTML = `<div><span style="color:${isAct ? '#4ade80' : '#f87171'}">●</span> <b>${n}</b> <small style="color:${isAct ? '#4ade80' : '#f87171'}">${isAct ? 'Haritası Açık' : 'Öyle bir oyuncu yok'}</small></div>` +
+      (isAct ? `<small style="color:var(--mut)">Seviye ${acct.level || 1} · ${(acct.money || 0).toLocaleString('tr-TR')}₺</small>` : '');
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:4px;align-items:center';
     if(isAct){
@@ -2779,15 +2777,33 @@ function renderFriends(){
   });
   $('frList').innerHTML = list.map(n => `<option value="${n}">`).join('');
 }
+$('frIn').oninput = () => { if($('frMsg')) $('frMsg').textContent = ''; };
 $('frAdd').onclick = () => {
   const n = $('frIn').value.trim().slice(0, 16);
-  if(n.length < 2){ flash('Geçersiz isim', '#f87171'); return; }
-  if(getProfile() && getProfile().user === n){ flash('Kendini arkadaş olarak ekleyemezsin', '#f87171'); return; }
+  const msgEl = $('frMsg');
+  if(msgEl) msgEl.textContent = '';
+  if(n.length < 2){
+    if(msgEl){ msgEl.style.color = '#f87171'; msgEl.textContent = 'Geçersiz isim'; }
+    flash('Geçersiz isim', '#f87171');
+    return;
+  }
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
+  if(myName && myName.toLowerCase() === n.toLowerCase()){
+    if(msgEl){ msgEl.style.color = '#f87171'; msgEl.textContent = 'Kendini arkadaş olarak ekleyemezsin'; }
+    flash('Kendini arkadaş olarak ekleyemezsin', '#f87171');
+    return;
+  }
+  if(!doesPlayerExist(n)){
+    if(msgEl){ msgEl.style.color = '#f87171'; msgEl.textContent = 'Öyle bir oyuncu yok!'; }
+    flash('Öyle bir oyuncu yok!', '#f87171');
+    return;
+  }
   const list = getFriends();
-  if(!list.includes(n)) list.push(n);
+  if(!list.some(x => x.toLowerCase() === n.toLowerCase())) list.push(n);
   try{ localStorage.setItem('donerFriends', JSON.stringify(list)); }catch(e){}
   getOrCreateFriendAcct(n);
   $('frIn').value = '';
+  if(msgEl){ msgEl.style.color = '#4ade80'; msgEl.textContent = `${n} eklendi!`; }
   renderFriends();
   flash(`${n} eklendi (🗺 Haritasına girebilirsin!)`, '#4ade80');
 };
@@ -5873,7 +5889,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-204140';
+const APP_VERSION = '2026-10-22-204632';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
