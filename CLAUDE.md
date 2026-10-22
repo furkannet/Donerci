@@ -18,6 +18,13 @@ Tarayıcıda çalışan, three.js tabanlı 3D döner dükkanı simülatörü. Ca
    - Uyarlanabilir çözünürlük açıktır: kare hızı 40 FPS altına düşünce çözünürlük otomatik %50'ye kadar küçülür, rahatlayınca yükselir. Yeni grafik bu mekanizmayı bozmaz.
    - Yeni bir grafik eklenince etkisi `FPS` göstergesiyle kontrol edilir; gözle görülür düşüş varsa sadeleştirilir.
 
+5. **İletişim ve Onay Kuralı (7. Sınıf Öğrencisi İçin Zorunlu Kural):**
+   - Bu programı 7. sınıfa giden bir öğrenci yazmaktadır. Kendisi uzun yazıları okurken sıkılır ve bir şeyi uzun anlatmayı sevmez.
+   - **Çok kısa ve sade yaz:** Tüm yanıtlar 1-2 kısa cümleden oluşmalı, uzun açıklamalardan kaçınılmalıdır.
+   - **Önce ne anladığını yaz ve onay iste:** Kullanıcı bir komut verdiğinde, kodları değiştirmeden önce komuttan anladığın şeyi kısaca ona yaz.
+   - **Onay almadan kodu değiştirme:** Kullanıcıdan açık onay ("evet", "tamam", "yap", "doğru" vb.) almadan **kesinlikle** kodları değiştirme.
+   - **Onay isteğini tekrarla:** Kullanıcı doğru onayı verene kadar her yanıtında kendisinden onay istediğini açıkça belirt (ör. *"Anladığım bu: ... Onaylıyor musun? Onay verene kadar kodları değiştirmiyorum."*).
+
 ## Yayın ve sürüm
 
 - `yayinla.sh` sürüm numarasını (`APP_VERSION` ve `version.json`) yeniler. Oyun bu numarayı sunucudakiyle karşılaştırıp güncelleme uyarısı gösterir; sürüm etiketi ekranın altında görünür.

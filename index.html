@@ -547,10 +547,7 @@ function broadcastAcctState(userName, stateObj, force){
   const now = Date.now();
   if(!force && now - lastNetSync < 8000) return;
   lastNetSync = now;
-  const px = (typeof P === 'object' && P) ? P.x : undefined;
-  const pz = (typeof P === 'object' && P) ? P.z : undefined;
-  const pyaw = (typeof P === 'object' && P) ? P.yaw : undefined;
-  postToRelays({type: 'sync', user: userName, x: px, z: pz, yaw: pyaw, state: stateObj, ts: now});
+  postToRelays({type: 'sync', user: userName, state: stateObj, ts: now});
 }
 function save(){
   try{
@@ -2540,18 +2537,13 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent){
   try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
   const prevTs = (onlineFriends[k] && onlineFriends[k].ts) || 0;
   const newTs = isRecent ? Date.now() : (prevTs || Date.now());
-  const prevMoveTs = (onlineFriends[k] && onlineFriends[k].moveTs) || 0;
-  const prevX = onlineFriends[k] && onlineFriends[k].x;
-  const prevZ = onlineFriends[k] && onlineFriends[k].z;
-  const hasNewPos = isRecent && typeof x === 'number' && typeof z === 'number' && (prevX === undefined || Math.hypot(x - prevX, z - prevZ) > 0.03);
   onlineFriends[k] = {
     user,
     state: st,
-    x: typeof x === 'number' ? x : (typeof prevX === 'number' ? prevX : (D.x - 2.0)),
-    z: typeof z === 'number' ? z : (typeof prevZ === 'number' ? prevZ : (D.z - 1.2)),
+    x: typeof x === 'number' ? x : ((onlineFriends[k] && onlineFriends[k].x) || (D.x - 2.0)),
+    z: typeof z === 'number' ? z : ((onlineFriends[k] && onlineFriends[k].z) || (D.z - 1.2)),
     yaw: yaw || (onlineFriends[k] && onlineFriends[k].yaw) || 0,
-    ts: newTs,
-    moveTs: hasNewPos ? Date.now() : prevMoveTs
+    ts: newTs
   };
 }
 function doesPlayerExist(name){
@@ -2797,10 +2789,7 @@ function handleIncomingCoopMsg(msg){
     }
     const peer = roomPeers[k];
     if(peer){
-      if(typeof msg.x === 'number' && typeof msg.z === 'number'){
-        if(Math.hypot(msg.x - peer.tx, msg.z - peer.tz) > 0.03) peer.lastNetMoveTs = Date.now();
-        peer.tx = msg.x; peer.tz = msg.z;
-      }
+      if(typeof msg.x === 'number'){ peer.tx = msg.x; peer.tz = msg.z; }
       if(typeof msg.yaw === 'number') peer.targetYaw = msg.yaw;
       peer.liveTs = Date.now();
     }
@@ -2817,7 +2806,7 @@ async function pollOnlineStatus(){
   try{
     const [res24, resRecent] = await Promise.all([
       Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=24h').catch(() => null))),
-      Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=20s').catch(() => null)))
+      Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=120s').catch(() => null)))
     ]);
     for(const r of res24){
       if(!r || !r.ok) continue;
@@ -2834,7 +2823,6 @@ async function pollOnlineStatus(){
         }catch(e){}
       });
     }
-    const latestByUser = {};
     for(const r of resRecent){
       if(!r || !r.ok) continue;
       const text = await r.text();
@@ -2845,21 +2833,13 @@ async function pollOnlineStatus(){
           if(outer && outer.message){
             const msg = JSON.parse(outer.message);
             if(msg && msg.user){
-              const uk = String(msg.user).toLowerCase();
-              const prev = latestByUser[uk];
-              if(!prev || (outer.time && prev._time && outer.time >= prev._time) || typeof msg.x === 'number'){
-                msg._time = outer.time || 0;
-                latestByUser[uk] = msg;
-              }
+              registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
+              handleIncomingCoopMsg(msg);
             }
           }
         }catch(e){}
       });
     }
-    Object.values(latestByUser).forEach(msg => {
-      registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
-      handleIncomingCoopMsg(msg);
-    });
     if(escPaused) renderFriends();
     if($('leadModal') && $('leadModal').style.display === 'flex') renderLeaderboard();
   }catch(e){}
@@ -2923,7 +2903,7 @@ function updateFriendCompanion(dt){
   for(const k of keys){
     const fc = roomPeers[k];
     if(!fc || !fc.g) continue;
-    // onlineFriends'te yeni konum varsa hedefi güncelle (BOT HAREKETİ YOK)
+    // onlineFriends'te yeni konum varsa hedefi güncelle
     if(onlineFriends[k]){
       if(typeof onlineFriends[k].x === 'number') fc.tx = onlineFriends[k].x;
       if(typeof onlineFriends[k].z === 'number') fc.tz = onlineFriends[k].z;
@@ -6255,7 +6235,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-220426';
+const APP_VERSION = '2026-10-22-221030';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
