@@ -2745,10 +2745,13 @@ function broadcastCoopPos(force){
   const moved = Math.hypot(wp.x - lastBroadX, wp.z - lastBroadZ) > 0.05 || Math.abs(wp.yaw - lastBroadYaw) > 0.1;
   const currentRoom = activeFriendAcct || myName;
   const now = Date.now();
+  const stVal = Number(shiftT.toFixed(1));
+  const nmVal = !!nightMode;
+  const wtVal = weather;
   // Yürürken sadece hafif konum paketi gönder (kasmayı önler), dururken veya ilk girişte tam durum gönder
   const pkt = force
-    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
-    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, ts: now};
+    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
+    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, st: stVal, nm: nmVal, wt: wtVal, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const minInterval = moved ? 350 : 3000;
   if(!force && now - lastCoopBroadcast < minInterval) return;
@@ -2805,6 +2808,26 @@ function handleIncomingCoopMsg(msg){
       if(typeof onlineFriends[k].x === 'number'){ peer.tx = onlineFriends[k].x; peer.tz = onlineFriends[k].z; }
       if(typeof onlineFriends[k].yaw === 'number') peer.targetYaw = onlineFriends[k].yaw;
       peer.liveTs = Date.now();
+    }
+    // Gün saati, gece/gündüz ve hava durumu birlikte oynanan oyuncuyla aynı olsun
+    const syncTimeFromThisPeer = isHostOfMyCurrentMap || (!activeFriendAcct && (joinedMyOwnRoom || inSameRoom) && myName && k < myName.toLowerCase());
+    if(syncTimeFromThisPeer || msg.type === 'time_sync'){
+      if(typeof msg.st === 'number' && !shiftEnded && !over && Math.abs(shiftT - msg.st) > 1.2){
+        shiftT = Math.max(1, Math.min(SHIFT_LEN, msg.st));
+        drawClock();
+      }
+      if(typeof msg.nm === 'boolean' && nightMode !== msg.nm){
+        nightMode = msg.nm;
+        skyPeriod = '';
+        updateSky();
+        if($('nightBtn')) $('nightBtn').innerHTML = nightMode ? '☀<span class="t"> Gündüz</span>' : '🌙<span class="t"> Gece</span>';
+      }
+      if(typeof msg.wt === 'string' && weather !== msg.wt){
+        weather = msg.wt;
+        if(typeof rain !== 'undefined' && rain) rain.visible = weather === 'rain';
+        skyPeriod = '';
+        updateSky();
+      }
     }
   }
   if(escPaused) renderFriends();
@@ -3268,6 +3291,13 @@ $('nightBtn').onclick = () => {
   skyPeriod = '';
   updateSky();
   $('nightBtn').innerHTML = nightMode ? '☀<span class="t"> Gündüz</span>' : '🌙<span class="t"> Gece</span>';
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
+  if(myName){
+    const wp = getMyWorldPos();
+    const pkt = {type: 'time_sync', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), st: Number(shiftT.toFixed(1)), nm: !!nightMode, wt: weather, ts: Date.now()};
+    if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+    postToRelays(pkt);
+  }
 };
 $('charBtn').onclick = () => { setOpen = true; $('char').style.display = 'flex'; renderChar(); };
 $('charClose').onclick = () => { setOpen = false; $('char').style.display = 'none'; renderAll(); };
@@ -6257,7 +6287,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-223450';
+const APP_VERSION = '2026-10-22-225719';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
