@@ -531,17 +531,23 @@ function load(){
   }catch(e){}
   return JSON.parse(JSON.stringify(DEF));
 }
+const NTFY_RELAYS = [
+  'https://ntfy.envs.net/doner_sim_furkannet_online_v1',
+  'https://ntfy.adminforge.de/doner_sim_furkannet_online_v1',
+  'https://ntfy.sh/doner_sim_furkannet_online_v1'
+];
+function postToRelays(pkt){
+  const body = JSON.stringify(pkt);
+  NTFY_RELAYS.forEach(url => {
+    try{ fetch(url, {method: 'POST', body}).catch(() => {}); }catch(e){}
+  });
+}
 function broadcastAcctState(userName, stateObj, force){
   if(!userName) return;
   const now = Date.now();
   if(!force && now - lastNetSync < 8000) return;
   lastNetSync = now;
-  try{
-    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
-      method: 'POST',
-      body: JSON.stringify({type: 'sync', user: userName, state: stateObj, ts: now})
-    }).catch(() => {});
-  }catch(e){}
+  postToRelays({type: 'sync', user: userName, state: stateObj, ts: now});
 }
 function save(){
   try{
@@ -2579,12 +2585,7 @@ function broadcastFriendEvent(type, toUser){
   if(!myName || !toUser) return;
   const pkt = {type, user: myName, from: myName, to: toUser, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
-  try{
-    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
-      method: 'POST',
-      body: JSON.stringify(pkt)
-    }).catch(() => {});
-  }catch(e){}
+  postToRelays(pkt);
 }
 async function checkPlayerExistsAsync(name){
   requestOnlinePing();
@@ -2716,12 +2717,7 @@ function requestOnlinePing(){
   if(!myName) return;
   const pkt = {type: 'ping', user: myName, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
-  try{
-    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
-      method: 'POST',
-      body: JSON.stringify(pkt)
-    }).catch(() => {});
-  }catch(e){}
+  postToRelays(pkt);
 }
 function broadcastCoopPos(force){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user);
@@ -2732,12 +2728,7 @@ function broadcastCoopPos(force){
   const now = Date.now();
   if(!force && now - lastCoopBroadcast < 900) return;
   lastCoopBroadcast = now;
-  try{
-    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
-      method: 'POST',
-      body: JSON.stringify(pkt)
-    }).catch(() => {});
-  }catch(e){}
+  postToRelays(pkt);
 }
 function handleIncomingCoopMsg(msg){
   if(!msg || !msg.user) return;
@@ -2788,33 +2779,36 @@ function handleIncomingCoopMsg(msg){
 if(coopChan){ coopChan.onmessage = ev => handleIncomingCoopMsg(ev.data); }
 async function pollOnlineStatus(){
   try{
-    const rAll = await fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h').catch(() => null);
-    if(rAll && rAll.ok){
-      const text = await rAll.text();
-      const lines = text.split('\n').filter(l => l.trim());
-      let refSec = 0;
-      const dateHdr = rAll.headers && rAll.headers.get('date');
-      if(dateHdr){
-        const parsed = Date.parse(dateHdr);
-        if(!isNaN(parsed)) refSec = Math.floor(parsed / 1000);
-      }
-      const parsedItems = [];
-      lines.forEach(line => {
+    const [res24, resRecent] = await Promise.all([
+      Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=24h').catch(() => null))),
+      Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=120s').catch(() => null)))
+    ]);
+    for(const r of res24){
+      if(!r || !r.ok) continue;
+      const text = await r.text();
+      text.split('\n').forEach(line => {
+        if(!line.trim()) return;
         try{
           const outer = JSON.parse(line);
           if(outer && outer.message){
-            if(typeof outer.time === 'number' && outer.time > refSec) refSec = outer.time;
-            parsedItems.push(outer);
+            const msg = JSON.parse(outer.message);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, false);
+            if(msg && (msg.type === 'friend_add' || msg.type === 'friend_del')) handleFriendEvent(msg);
           }
         }catch(e){}
       });
-      parsedItems.forEach(outer => {
+    }
+    for(const r of resRecent){
+      if(!r || !r.ok) continue;
+      const text = await r.text();
+      text.split('\n').forEach(line => {
+        if(!line.trim()) return;
         try{
-          const msg = JSON.parse(outer.message);
-          if(!msg) return;
-          const isRecent = (typeof outer.time === 'number' && refSec > 0) ? ((refSec - outer.time) <= 150) : true;
-          if(msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, isRecent);
-          if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
+          const outer = JSON.parse(line);
+          if(outer && outer.message){
+            const msg = JSON.parse(outer.message);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
+          }
         }catch(e){}
       });
     }
@@ -2823,17 +2817,23 @@ async function pollOnlineStatus(){
   }catch(e){}
 }
 function connectOnlineWS(){
-  try{
-    const ws = new WebSocket('wss://ntfy.sh/doner_sim_furkannet_online_v1/ws');
-    ws.onmessage = ev => {
+  NTFY_RELAYS.forEach(httpUrl => {
+    const wsUrl = httpUrl.replace(/^https:/, 'wss:') + '/ws';
+    function openSock(){
       try{
-        const outer = JSON.parse(ev.data);
-        if(!outer || !outer.message) return;
-        handleIncomingCoopMsg(JSON.parse(outer.message));
+        const ws = new WebSocket(wsUrl);
+        ws.onmessage = ev => {
+          try{
+            const outer = JSON.parse(ev.data);
+            if(!outer || !outer.message) return;
+            handleIncomingCoopMsg(JSON.parse(outer.message));
+          }catch(e){}
+        };
+        ws.onclose = () => setTimeout(openSock, 4000);
       }catch(e){}
-    };
-    ws.onclose = () => setTimeout(connectOnlineWS, 3000);
-  }catch(e){}
+    }
+    openSock();
+  });
 }
 (function initFriendsOnline(){
   pollOnlineStatus();
@@ -3004,7 +3004,7 @@ function renderFriends(){
     const isAct = isFriendActive(n);
     const inThis = activeFriendAcct && activeFriendAcct.toLowerCase() === n.toLowerCase();
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;border-radius:8px;background:' + (isAct ? 'rgba(74,222,128,.08)' : 'rgba(255,255,255,.05)') + ';border:1px solid ' + (isAct ? '#4ade80' : 'var(--line)');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;border-radius:8px;background:' + (isAct ? 'rgba(74,222,128,.12)' : 'rgba(255,255,255,.05)') + ';border:1px solid ' + (isAct ? '#4ade80' : 'var(--line)');
     const info = document.createElement('div');
     const statusText = !exists ? 'Öyle bir oyuncu yok' : (isAct ? '🟢 Çevrimiçi (Şu an oynuyor)' : 'Çevrimdışı');
     const statusCol = !exists ? '#f87171' : (isAct ? '#4ade80' : '#9ca3af');
@@ -3013,12 +3013,18 @@ function renderFriends(){
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:4px;align-items:center';
     if(exists){
-      const enterBtn = document.createElement('button');
-      enterBtn.textContent = inThis ? '✓ Haritasındasın' : (isAct ? '🗺 Haritasına Gir' : 'Çevrimdışı');
-      enterBtn.disabled = !!inThis || !isAct;
-      enterBtn.style.cssText = 'padding:5px 8px;font-size:12px;font-weight:600;background:' + (inThis || !isAct ? '#222b38' : '#16a34a') + ';border-color:transparent';
-      enterBtn.onclick = () => enterFriendAccount(n);
-      actions.appendChild(enterBtn);
+      const badge = document.createElement('span');
+      badge.textContent = isAct ? '🟢 Çevrimiçi' : '⚫ Çevrimdışı';
+      badge.style.cssText = 'padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;background:' + (isAct ? '#16a34a' : '#222b38') + ';color:' + (isAct ? '#fff' : '#9ca3af');
+      actions.appendChild(badge);
+      if(isAct){
+        const enterBtn = document.createElement('button');
+        enterBtn.textContent = inThis ? '✓ Haritasındasın' : '🗺 Haritasına Gir';
+        enterBtn.disabled = !!inThis;
+        enterBtn.style.cssText = 'padding:5px 8px;font-size:12px;font-weight:600;background:' + (inThis ? '#222b38' : '#1e3a52') + ';border-color:#4ade80';
+        enterBtn.onclick = () => enterFriendAccount(n);
+        actions.appendChild(enterBtn);
+      }
     }
     const del = document.createElement('button');
     del.textContent = 'Sil';
@@ -6168,7 +6174,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-212441';
+const APP_VERSION = '2026-10-22-213555';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
