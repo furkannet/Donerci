@@ -29,3 +29,4 @@ Tarayıcıda çalışan, three.js tabanlı 3D döner dükkanı simülatörü. Ca
 
 - `yayinla.sh` sürüm numarasını (`APP_VERSION` ve `version.json`) yeniler. Oyun bu numarayı sunucudakiyle karşılaştırıp güncelleme uyarısı gösterir; sürüm etiketi ekranın altında görünür.
 - Sürüm numarasını elle değiştirme; yayın betiği yönetir.
+

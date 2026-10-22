@@ -2527,22 +2527,27 @@ function makeNameSprite(text){
   return sp;
 }
 const knownPlayers = {}; // sunucudan / ağdan bilinen tüm gerçek oyuncular
-function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent){
+function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs){
   if(!user) return;
   const k = String(user).toLowerCase();
-  const st = normalizeState(stateObj || (onlineFriends[k] && onlineFriends[k].state) || (knownPlayers[k] && knownPlayers[k].state) || DEF);
+  const prev = onlineFriends[k];
+  const incomingTs = Number(msgTs) || 0;
+  // Eski (tarihi geçmiş) bir mesaj yeni konumu ezmesin
+  const isNewerPos = !prev || !prev.msgTs || !incomingTs || (incomingTs >= prev.msgTs);
+  const st = normalizeState((isNewerPos && stateObj) || (prev && prev.state) || (knownPlayers[k] && knownPlayers[k].state) || stateObj || DEF);
   st.settings.name = user;
   st.realAccount = true;
   knownPlayers[k] = {user, state: st};
   try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
-  const prevTs = (onlineFriends[k] && onlineFriends[k].ts) || 0;
+  const prevTs = (prev && prev.ts) || 0;
   const newTs = isRecent ? Date.now() : (prevTs || Date.now());
   onlineFriends[k] = {
     user,
     state: st,
-    x: typeof x === 'number' ? x : ((onlineFriends[k] && onlineFriends[k].x) || (D.x - 2.0)),
-    z: typeof z === 'number' ? z : ((onlineFriends[k] && onlineFriends[k].z) || (D.z - 1.2)),
-    yaw: yaw || (onlineFriends[k] && onlineFriends[k].yaw) || 0,
+    x: (isNewerPos && typeof x === 'number') ? x : ((prev && typeof prev.x === 'number') ? prev.x : (D.x - 2.0)),
+    z: (isNewerPos && typeof z === 'number') ? z : ((prev && typeof prev.z === 'number') ? prev.z : (D.z - 1.2)),
+    yaw: (isNewerPos && typeof yaw === 'number') ? yaw : ((prev && typeof prev.yaw === 'number') ? prev.yaw : 0),
+    msgTs: isNewerPos && incomingTs ? incomingTs : ((prev && prev.msgTs) || 0),
     ts: newTs
   };
 }
@@ -2751,18 +2756,19 @@ function handleIncomingCoopMsg(msg){
   if(myName && msg.user.toLowerCase() === myName.toLowerCase()) return;
   const k = String(msg.user).toLowerCase();
   const wasOnline = isFriendActive(msg.user);
-  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
-  if(msg.type === 'ping'){
+  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true, msg.ts);
+  if(msg.type === 'ping' || msg.type === 'room_join'){
     broadcastCoopPos(true);
   }
   const isMyFriend = getFriends().some(x => x.toLowerCase() === k);
+  const isHostOfMyCurrentMap = !!(activeFriendAcct && activeFriendAcct.toLowerCase() === k);
   if(!wasOnline && isMyFriend){
     flash(`🟢 ${msg.user} çevrimiçi oldu!`, '#4ade80');
   }
   const myRoom = (activeFriendAcct || myName || '').toLowerCase();
   const msgRoom = (msg.room || msg.target || msg.to || msg.user || '').toLowerCase();
   const joinedMyOwnRoom = !activeFriendAcct && myName && (
-    msg.type === 'room_join' && msg.to && msg.to.toLowerCase() === myName.toLowerCase() ||
+    (msg.type === 'room_join' && msg.to && msg.to.toLowerCase() === myName.toLowerCase()) ||
     (msg.target && msg.target.toLowerCase() === myName.toLowerCase()) ||
     (msg.room && msg.room.toLowerCase() === myName.toLowerCase())
   );
@@ -2775,8 +2781,8 @@ function handleIncomingCoopMsg(msg){
     if(escPaused) renderFriends();
     return;
   }
-  const inSameRoom = myRoom && (msgRoom === myRoom || (activeFriendAcct && activeFriendAcct.toLowerCase() === k));
-  if(joinedMyOwnRoom || inSameRoom || isMyFriend){
+  const inSameRoom = myRoom && (msgRoom === myRoom || isHostOfMyCurrentMap);
+  if(joinedMyOwnRoom || inSameRoom || isHostOfMyCurrentMap || isMyFriend){
     const list = getFriends();
     if(!list.some(x => x.toLowerCase() === k)){
       list.push(msg.user);
@@ -2789,14 +2795,10 @@ function handleIncomingCoopMsg(msg){
     }
     const peer = roomPeers[k];
     if(peer){
-      if(typeof msg.x === 'number'){ peer.tx = msg.x; peer.tz = msg.z; }
-      if(typeof msg.yaw === 'number') peer.targetYaw = msg.yaw;
+      if(typeof onlineFriends[k].x === 'number'){ peer.tx = onlineFriends[k].x; peer.tz = onlineFriends[k].z; }
+      if(typeof onlineFriends[k].yaw === 'number') peer.targetYaw = onlineFriends[k].yaw;
       peer.liveTs = Date.now();
     }
-  } else if(roomPeers[k] && (!activeFriendAcct || activeFriendAcct.toLowerCase() !== k)){
-    removeRoomPeer(msg.user);
-    renderAll();
-    flash(`↩ ${msg.user} odadan ayrıldı`, '#7dd3fc');
   }
   if(escPaused) renderFriends();
   if($('leadModal') && $('leadModal').style.display === 'flex') renderLeaderboard();
@@ -2806,7 +2808,7 @@ async function pollOnlineStatus(){
   try{
     const [res24, resRecent] = await Promise.all([
       Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=24h').catch(() => null))),
-      Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=120s').catch(() => null)))
+      Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=45s').catch(() => null)))
     ]);
     for(const r of res24){
       if(!r || !r.ok) continue;
@@ -2817,12 +2819,14 @@ async function pollOnlineStatus(){
           const outer = JSON.parse(line);
           if(outer && outer.message){
             const msg = JSON.parse(outer.message);
-            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, false);
+            const ts = (msg && msg.ts) || (outer.time ? outer.time * 1000 : 0);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, false, ts);
             if(msg && (msg.type === 'friend_add' || msg.type === 'friend_del')) handleFriendEvent(msg);
           }
         }catch(e){}
       });
     }
+    const recentMsgs = [];
     for(const r of resRecent){
       if(!r || !r.ok) continue;
       const text = await r.text();
@@ -2833,13 +2837,25 @@ async function pollOnlineStatus(){
           if(outer && outer.message){
             const msg = JSON.parse(outer.message);
             if(msg && msg.user){
-              registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
-              handleIncomingCoopMsg(msg);
+              msg.ts = msg.ts || (outer.time ? outer.time * 1000 : Date.now());
+              recentMsgs.push(msg);
             }
           }
         }catch(e){}
       });
     }
+    // En son konumu her oyuncu için yalnızca bir kez (en güncel zaman damgasıyla) uygula
+    const latestByUser = {};
+    recentMsgs.forEach(m => {
+      const uk = String(m.user).toLowerCase();
+      if(!latestByUser[uk] || (m.ts || 0) >= (latestByUser[uk].ts || 0)){
+        latestByUser[uk] = m;
+      }
+    });
+    Object.values(latestByUser).forEach(m => {
+      registerKnownPlayer(m.user, m.state, m.x, m.z, m.yaw, true, m.ts);
+      handleIncomingCoopMsg(m);
+    });
     if(escPaused) renderFriends();
     if($('leadModal') && $('leadModal').style.display === 'flex') renderLeaderboard();
   }catch(e){}
@@ -2878,8 +2894,8 @@ function connectOnlineWS(){
   }catch(e){}
   pollOnlineStatus();
   connectOnlineWS();
-  setInterval(() => broadcastCoopPos(true), 2500);
-  setInterval(() => pollOnlineStatus(), 3000);
+  setInterval(() => broadcastCoopPos(true), 2000);
+  setInterval(() => pollOnlineStatus(), 2000);
   setInterval(() => { if(escPaused) renderFriends(); }, 2000);
   setTimeout(() => broadcastCoopPos(true), 200);
   window.addEventListener('focus', () => { broadcastCoopPos(true); pollOnlineStatus(); });
@@ -6235,7 +6251,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-221030';
+const APP_VERSION = '2026-10-22-221820';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
