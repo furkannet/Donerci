@@ -2709,25 +2709,37 @@ function returnToMyAccount(){
 }
 let lastCoopBroadcast = 0;
 let lastPingSent = 0;
+let lastBroadX = 0, lastBroadZ = 0, lastBroadYaw = 0;
+function getMyWorldPos(){
+  if(C.driving) return {x: C.x, z: C.z, yaw: C.h + Math.PI, driving: true, carId: S.car, carPaint: S.mods && S.mods.paint};
+  if(D.driving) return {x: D.x, z: D.z, yaw: D.h + Math.PI, driving: false};
+  if(CM.driving) return {x: CM.x, z: CM.z, yaw: CM.h + Math.PI, driving: false};
+  return {x: P.x, z: P.z, yaw: P.yaw, driving: false};
+}
 function requestOnlinePing(){
   const now = Date.now();
   if(now - lastPingSent < 2000) return;
   lastPingSent = now;
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(!myName) return;
-  const pkt = {type: 'ping', user: myName, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
+  const wp = getMyWorldPos();
+  const pkt = {type: 'ping', user: myName, x: wp.x, z: wp.z, yaw: wp.yaw, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   postToRelays(pkt);
 }
 function broadcastCoopPos(force){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user);
   if(!myName) return;
+  const wp = getMyWorldPos();
+  const moved = Math.hypot(wp.x - lastBroadX, wp.z - lastBroadZ) > 0.04 || Math.abs(wp.yaw - lastBroadYaw) > 0.08;
   const currentRoom = activeFriendAcct || myName;
-  const pkt = {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: P.x, z: P.z, yaw: P.yaw, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
+  const pkt = {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, carId: wp.carId, carPaint: wp.carPaint, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const now = Date.now();
-  if(!force && now - lastCoopBroadcast < 900) return;
+  const minInterval = moved ? 220 : 1200;
+  if(!force && now - lastCoopBroadcast < minInterval) return;
   lastCoopBroadcast = now;
+  lastBroadX = wp.x; lastBroadZ = wp.z; lastBroadYaw = wp.yaw;
   postToRelays(pkt);
 }
 function handleIncomingCoopMsg(msg){
@@ -2741,7 +2753,8 @@ function handleIncomingCoopMsg(msg){
   if(msg.type === 'ping'){
     broadcastCoopPos(true);
   }
-  if(!wasOnline && getFriends().some(x => x.toLowerCase() === k)){
+  const isMyFriend = getFriends().some(x => x.toLowerCase() === k);
+  if(!wasOnline && isMyFriend){
     flash(`🟢 ${msg.user} çevrimiçi oldu!`, '#4ade80');
   }
   const myRoom = (activeFriendAcct || myName || '').toLowerCase();
@@ -2751,7 +2764,7 @@ function handleIncomingCoopMsg(msg){
     (msg.room && msg.room.toLowerCase() === myName.toLowerCase())
   );
   const inSameRoom = myRoom && (msgRoom === myRoom || (activeFriendAcct && activeFriendAcct.toLowerCase() === k));
-  if(joinedMyOwnRoom || inSameRoom){
+  if(joinedMyOwnRoom || inSameRoom || isMyFriend){
     const list = getFriends();
     if(!list.some(x => x.toLowerCase() === k)){
       list.push(msg.user);
@@ -2850,9 +2863,9 @@ function connectOnlineWS(){
   }catch(e){}
   pollOnlineStatus();
   connectOnlineWS();
-  setInterval(() => broadcastCoopPos(true), 5000);
-  setInterval(() => pollOnlineStatus(), 8000);
-  setInterval(() => { if(escPaused) renderFriends(); }, 2500);
+  setInterval(() => broadcastCoopPos(true), 2500);
+  setInterval(() => pollOnlineStatus(), 3000);
+  setInterval(() => { if(escPaused) renderFriends(); }, 2000);
   setTimeout(() => broadcastCoopPos(true), 200);
   window.addEventListener('focus', () => { broadcastCoopPos(true); pollOnlineStatus(); });
   document.addEventListener('visibilitychange', () => { if(!document.hidden){ broadcastCoopPos(true); pollOnlineStatus(); } });
@@ -2861,16 +2874,29 @@ function updateFriendCompanion(dt){
   if(activeFriendAcct && !roomPeers[activeFriendAcct.toLowerCase()]){
     spawnFriendCompanion(activeFriendAcct);
   }
+  // Arkadaş listemizdeki aktif/çevrimiçi oyuncuları da haritada otomatik göster
+  getFriends().forEach(fn => {
+    const fk = fn.toLowerCase();
+    if(!roomPeers[fk] && onlineFriends[fk] && isFriendActive(fn)){
+      spawnRoomPeer(fn, onlineFriends[fk].x, onlineFriends[fk].z, onlineFriends[fk].yaw);
+    }
+  });
   const keys = Object.keys(roomPeers);
-  if(activeFriendAcct || keys.length > 0){
-    broadcastCoopPos(false);
-  }
+  // Kendi konumumuzu da sürekli yayınla ki arkadaşlarımız da bizi hareket ederken görsün
+  broadcastCoopPos(false);
   const now = Date.now();
   for(const k of keys){
     const fc = roomPeers[k];
     if(!fc || !fc.g) continue;
-    // Uzun süre bağlantı kesilirse kendi odamızdaki misafiri kaldır
-    if((!activeFriendAcct || activeFriendAcct.toLowerCase() !== k) && (now - fc.liveTs > 70000)){
+    // onlineFriends'te yeni konum varsa hedefi güncelle
+    if(onlineFriends[k]){
+      if(typeof onlineFriends[k].x === 'number') fc.tx = onlineFriends[k].x;
+      if(typeof onlineFriends[k].z === 'number') fc.tz = onlineFriends[k].z;
+      if(typeof onlineFriends[k].yaw === 'number') fc.targetYaw = onlineFriends[k].yaw;
+    }
+    // Uzun süre bağlantı kesilirse ve arkadaşımız değilse kaldır
+    const isFr = getFriends().some(x => x.toLowerCase() === k);
+    if(!isFr && (!activeFriendAcct || activeFriendAcct.toLowerCase() !== k) && (now - fc.liveTs > 70000)){
       removeRoomPeer(fc.name);
       renderAll();
       continue;
@@ -2878,12 +2904,14 @@ function updateFriendCompanion(dt){
     // BOT YOK: Yalnızca gerçek oyuncudan gelen canlı konum verisine göre hareket eder
     const dx = fc.tx - fc.x, dz = fc.tz - fc.z;
     const dist = Math.hypot(dx, dz);
-    if(dist > 0.05){
-      const stepSp = Math.min(dist, Math.max(4.5, dist * 5) * dt);
+    if(dist > 25){
+      fc.x = fc.tx; fc.z = fc.tz;
+    } else if(dist > 0.04){
+      const stepSp = Math.min(dist, Math.max(5.2, dist * 7) * dt);
       fc.x += (dx / dist) * stepSp;
       fc.z += (dz / dist) * stepSp;
       fc.yaw = Math.atan2(dx, dz);
-      fc.ph += dt * 9;
+      fc.ph += dt * 10;
       legPose(fc.legL, Math.sin(fc.ph) * 0.6);
       legPose(fc.legR, -Math.sin(fc.ph) * 0.6);
       if(fc.armL) fc.armL.rotation.x = -Math.sin(fc.ph) * 0.45;
@@ -6192,7 +6220,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-214102';
+const APP_VERSION = '2026-10-22-215140';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
