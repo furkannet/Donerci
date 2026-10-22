@@ -2491,17 +2491,55 @@ function makeNameSprite(text){
   sp.renderOrder = 10;
   return sp;
 }
+const knownPlayers = {}; // sunucudan / ağdan bilinen tüm gerçek oyuncular
+function registerKnownPlayer(user, stateObj, x, z, yaw){
+  if(!user) return;
+  const k = String(user).toLowerCase();
+  const st = normalizeState(stateObj || (onlineFriends[k] && onlineFriends[k].state) || (knownPlayers[k] && knownPlayers[k].state) || DEF);
+  st.settings.name = user;
+  st.realAccount = true;
+  knownPlayers[k] = {user, state: st};
+  try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
+  onlineFriends[k] = {
+    user,
+    state: st,
+    x: typeof x === 'number' ? x : ((onlineFriends[k] && onlineFriends[k].x) || (D.x - 2.0)),
+    z: typeof z === 'number' ? z : ((onlineFriends[k] && onlineFriends[k].z) || (D.z - 1.2)),
+    yaw: yaw || 0,
+    ts: Date.now()
+  };
+}
 function doesPlayerExist(name){
   const k = name.toLowerCase();
-  if(onlineFriends[k]) return true;
+  if(onlineFriends[k] || knownPlayers[k]) return true;
   try{
     const saved = localStorage.getItem('donerAcct_' + k);
     if(saved){
       const parsed = JSON.parse(saved);
-      if(parsed && parsed.realAccount) return true;
+      if(parsed && (parsed.realAccount || (parsed.settings && parsed.settings.name))) return true;
     }
   }catch(e){}
   return false;
+}
+async function checkPlayerExistsAsync(name){
+  if(doesPlayerExist(name)) return true;
+  try{
+    const r = await fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h');
+    if(r.ok){
+      const text = await r.text();
+      text.split('\n').forEach(line => {
+        if(!line.trim()) return;
+        try{
+          const outer = JSON.parse(line);
+          if(outer && outer.message){
+            const msg = JSON.parse(outer.message);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw);
+          }
+        }catch(e){}
+      });
+    }
+  }catch(e){}
+  return doesPlayerExist(name);
 }
 function getOrCreateFriendAcct(name){
   const key = 'donerAcct_' + name.toLowerCase();
@@ -2610,18 +2648,7 @@ function handleIncomingCoopMsg(msg){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(myName && msg.user.toLowerCase() === myName.toLowerCase()) return;
   const k = String(msg.user).toLowerCase();
-  const st = normalizeState(msg.state || (onlineFriends[k] && onlineFriends[k].state) || DEF);
-  st.settings.name = msg.user;
-  st.realAccount = true;
-  try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
-  onlineFriends[k] = {
-    user: msg.user,
-    state: st,
-    x: typeof msg.x === 'number' ? msg.x : (D.x - 2.0),
-    z: typeof msg.z === 'number' ? msg.z : (D.z - 1.2),
-    yaw: msg.yaw || 0,
-    ts: Date.now()
-  };
+  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw);
   // Eğer o arkadaşımız bizim haritamıza katılmışsa onu kendi haritamızda göster
   if(msg.target && myName && msg.target.toLowerCase() === myName.toLowerCase() && !activeFriendAcct){
     activeFriendAcct = msg.user;
@@ -2638,6 +2665,21 @@ function handleIncomingCoopMsg(msg){
 }
 if(coopChan){ coopChan.onmessage = ev => handleIncomingCoopMsg(ev.data); }
 (function initFriendsOnline(){
+  try{
+    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h').then(r => r.text()).then(text => {
+      text.split('\n').forEach(line => {
+        if(!line.trim()) return;
+        try{
+          const outer = JSON.parse(line);
+          if(outer && outer.message){
+            const msg = JSON.parse(outer.message);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw);
+          }
+        }catch(e){}
+      });
+      if(escPaused) renderFriends();
+    }).catch(() => {});
+  }catch(e){}
   try{
     const ws = new WebSocket('wss://ntfy.sh/doner_sim_furkannet_online_v1/ws');
     ws.onmessage = ev => {
@@ -2778,7 +2820,7 @@ function renderFriends(){
   $('frList').innerHTML = list.map(n => `<option value="${n}">`).join('');
 }
 $('frIn').oninput = () => { if($('frMsg')) $('frMsg').textContent = ''; };
-$('frAdd').onclick = () => {
+$('frAdd').onclick = async () => {
   const n = $('frIn').value.trim().slice(0, 16);
   const msgEl = $('frMsg');
   if(msgEl) msgEl.textContent = '';
@@ -2794,18 +2836,23 @@ $('frAdd').onclick = () => {
     return;
   }
   if(!doesPlayerExist(n)){
-    if(msgEl){ msgEl.style.color = '#f87171'; msgEl.textContent = 'Öyle bir oyuncu yok!'; }
-    flash('Öyle bir oyuncu yok!', '#f87171');
-    return;
+    if(msgEl){ msgEl.style.color = 'var(--mut)'; msgEl.textContent = 'Oyuncu kontrol ediliyor...'; }
+    const exists = await checkPlayerExistsAsync(n);
+    if(!exists){
+      if(msgEl){ msgEl.style.color = '#f87171'; msgEl.textContent = 'Öyle bir oyuncu yok!'; }
+      flash('Öyle bir oyuncu yok!', '#f87171');
+      return;
+    }
   }
+  const canonicalName = (knownPlayers[n.toLowerCase()] && knownPlayers[n.toLowerCase()].user) || (onlineFriends[n.toLowerCase()] && onlineFriends[n.toLowerCase()].user) || n;
   const list = getFriends();
-  if(!list.some(x => x.toLowerCase() === n.toLowerCase())) list.push(n);
+  if(!list.some(x => x.toLowerCase() === canonicalName.toLowerCase())) list.push(canonicalName);
   try{ localStorage.setItem('donerFriends', JSON.stringify(list)); }catch(e){}
-  getOrCreateFriendAcct(n);
+  getOrCreateFriendAcct(canonicalName);
   $('frIn').value = '';
-  if(msgEl){ msgEl.style.color = '#4ade80'; msgEl.textContent = `${n} eklendi!`; }
+  if(msgEl){ msgEl.style.color = '#4ade80'; msgEl.textContent = `${canonicalName} eklendi!`; }
   renderFriends();
-  flash(`${n} eklendi (🗺 Haritasına girebilirsin!)`, '#4ade80');
+  flash(`${canonicalName} eklendi (🗺 Haritasına girebilirsin!)`, '#4ade80');
 };
 window.addEventListener('keydown', e => {
   if(e.key === 'Escape') togglePause();
@@ -3421,7 +3468,9 @@ async function profileAct(isReg){
     if(!cur || cur.user !== u || cur.hash !== h){ $('pMsg').textContent = 'Kullanıcı adı veya şifre yanlış'; return; }
   }
   S.settings.name = u;
+  S.realAccount = true;
   save();
+  broadcastCoopPos(true);
   hideProfile();
   flash('Hoş geldin, ' + u, '#4ade80');
   if(tutOpen) $('tut').style.display = 'flex';
@@ -5889,7 +5938,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-204632';
+const APP_VERSION = '2026-10-22-205401';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
