@@ -2691,6 +2691,7 @@ function enterFriendAccount(name){
     P.yaw = Math.atan2(P.x - fx, P.z - fz);
   }
   broadcastCoopPos(true);
+  broadcastFriendEvent('room_join', name);
   if(escPaused) togglePause();
   renderAll();
   flash(`🗺 ${name} haritasına girdin! (Canlı oynuyorsunuz)`, '#4ade80');
@@ -2703,6 +2704,7 @@ function returnToMyAccount(){
   clearAllRoomPeers();
   if(friendMapCarMesh){ scene.remove(friendMapCarMesh); friendMapCarMesh = null; }
   broadcastCoopPos(true);
+  broadcastFriendEvent('room_leave', prev);
   renderAll();
   if(escPaused) renderFriends();
   flash(`↩ Kendi haritana döndün (${prev} haritasından çıkıldı)`, '#7dd3fc');
@@ -2723,7 +2725,7 @@ function requestOnlinePing(){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(!myName) return;
   const wp = getMyWorldPos();
-  const pkt = {type: 'ping', user: myName, x: wp.x, z: wp.z, yaw: wp.yaw, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
+  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   postToRelays(pkt);
 }
@@ -2758,11 +2760,21 @@ function handleIncomingCoopMsg(msg){
     flash(`🟢 ${msg.user} çevrimiçi oldu!`, '#4ade80');
   }
   const myRoom = (activeFriendAcct || myName || '').toLowerCase();
-  const msgRoom = (msg.room || msg.target || msg.user || '').toLowerCase();
+  const msgRoom = (msg.room || msg.target || msg.to || msg.user || '').toLowerCase();
   const joinedMyOwnRoom = !activeFriendAcct && myName && (
+    msg.type === 'room_join' && msg.to && msg.to.toLowerCase() === myName.toLowerCase() ||
     (msg.target && msg.target.toLowerCase() === myName.toLowerCase()) ||
     (msg.room && msg.room.toLowerCase() === myName.toLowerCase())
   );
+  if(msg.type === 'room_leave' && msg.to && myName && msg.to.toLowerCase() === myName.toLowerCase()){
+    if(roomPeers[k]){
+      removeRoomPeer(msg.user);
+      renderAll();
+      flash(`↩ ${msg.user} senin haritandan ayrıldı`, '#7dd3fc');
+    }
+    if(escPaused) renderFriends();
+    return;
+  }
   const inSameRoom = myRoom && (msgRoom === myRoom || (activeFriendAcct && activeFriendAcct.toLowerCase() === k));
   if(joinedMyOwnRoom || inSameRoom || isMyFriend){
     const list = getFriends();
@@ -2773,7 +2785,7 @@ function handleIncomingCoopMsg(msg){
     if(!roomPeers[k]){
       spawnRoomPeer(msg.user, onlineFriends[k].x, onlineFriends[k].z, onlineFriends[k].yaw);
       renderAll();
-      if(joinedMyOwnRoom) flash(`🟢 ${msg.user} senin odana (haritana) katıldı!`, '#4ade80');
+      if(joinedMyOwnRoom) flash(`🟢 ${msg.user} senin hesabına (haritana) geldi!`, '#4ade80');
     }
     const peer = roomPeers[k];
     if(peer){
@@ -2820,7 +2832,10 @@ async function pollOnlineStatus(){
           const outer = JSON.parse(line);
           if(outer && outer.message){
             const msg = JSON.parse(outer.message);
-            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
+            if(msg && msg.user){
+              registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
+              handleIncomingCoopMsg(msg);
+            }
           }
         }catch(e){}
       });
@@ -3024,7 +3039,7 @@ function renderFriends(){
       if(bb) bb.onclick = returnToMyAccount;
     } else if(peerNames.length){
       banner.style.display = 'block';
-      banner.innerHTML = `🟢 Şu an odanda (haritanda) olanlar: <b>${peerNames.join(', ')}</b>`;
+      banner.innerHTML = `🟢 Şu an senin hesabına (haritana) gelenler: <b>${peerNames.join(', ')}</b>`;
     } else {
       banner.style.display = 'none';
     }
@@ -6220,7 +6235,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-215140';
+const APP_VERSION = '2026-10-22-215932';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
