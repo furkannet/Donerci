@@ -547,7 +547,10 @@ function broadcastAcctState(userName, stateObj, force){
   const now = Date.now();
   if(!force && now - lastNetSync < 8000) return;
   lastNetSync = now;
-  postToRelays({type: 'sync', user: userName, state: stateObj, ts: now});
+  const px = (typeof P === 'object' && P) ? P.x : undefined;
+  const pz = (typeof P === 'object' && P) ? P.z : undefined;
+  const pyaw = (typeof P === 'object' && P) ? P.yaw : undefined;
+  postToRelays({type: 'sync', user: userName, x: px, z: pz, yaw: pyaw, state: stateObj, ts: now});
 }
 function save(){
   try{
@@ -2814,7 +2817,7 @@ async function pollOnlineStatus(){
   try{
     const [res24, resRecent] = await Promise.all([
       Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=24h').catch(() => null))),
-      Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=120s').catch(() => null)))
+      Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=20s').catch(() => null)))
     ]);
     for(const r of res24){
       if(!r || !r.ok) continue;
@@ -2831,6 +2834,7 @@ async function pollOnlineStatus(){
         }catch(e){}
       });
     }
+    const latestByUser = {};
     for(const r of resRecent){
       if(!r || !r.ok) continue;
       const text = await r.text();
@@ -2841,13 +2845,21 @@ async function pollOnlineStatus(){
           if(outer && outer.message){
             const msg = JSON.parse(outer.message);
             if(msg && msg.user){
-              registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
-              handleIncomingCoopMsg(msg);
+              const uk = String(msg.user).toLowerCase();
+              const prev = latestByUser[uk];
+              if(!prev || (outer.time && prev._time && outer.time >= prev._time) || typeof msg.x === 'number'){
+                msg._time = outer.time || 0;
+                latestByUser[uk] = msg;
+              }
             }
           }
         }catch(e){}
       });
     }
+    Object.values(latestByUser).forEach(msg => {
+      registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true);
+      handleIncomingCoopMsg(msg);
+    });
     if(escPaused) renderFriends();
     if($('leadModal') && $('leadModal').style.display === 'flex') renderLeaderboard();
   }catch(e){}
@@ -6243,7 +6255,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-220301';
+const APP_VERSION = '2026-10-22-220426';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
