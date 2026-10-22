@@ -133,10 +133,38 @@ button small{font-size:9px;margin-top:0}
 #fps{right:auto!important;left:calc(50% - 90px)!important;top:auto!important;bottom:max(3px,env(safe-area-inset-bottom))!important;font-size:10px!important;padding:1px 4px!important}
 @media (max-height:340px){#stats{font-size:10px;line-height:1.2}#pad{width:clamp(70px,22vh,100px)}}
 @media (max-height:520px){#bottom{max-height:62vh}}
+/* Telefona özel: sağ ve soldaki panelleri/kontrolleri küçült */
+@media (max-width:899px), (max-height:520px){
+  #stats{padding:4px 6px;font-size:9px;line-height:1.22;max-width:122px;border-radius:8px}
+  #stats #eat{margin-top:3px!important;padding:3px 6px!important;font-size:9px!important}
+  #rightCol{width:min(116px,28vw);gap:3px}
+  #rightCol #board{padding:4px 6px;font-size:8.5px;border-radius:8px}
+  #board h4{font-size:8px;margin:0 0 1px}
+  #boardBody ol{margin:2px 0 0;padding-left:13px;line-height:1.25}
+  .pbar{height:3px;margin-top:3px}
+  #future{margin-top:3px;padding-top:2px;font-size:8px;line-height:1.2}
+  #future .fl{font-size:8px}
+  #pad{width:clamp(68px,19vh,92px);gap:3px}
+  #pad #drive,#pad #shutter,#pad #run,#pad #home,#pad #homeOut,#pad #pay,#pad #carBtn,#pad #carExit{padding:4px 3px;font-size:9.5px}
+  #bottom{width:min(256px,calc(100% - 12px));padding:4px;border-radius:8px}
+  #plate{min-height:14px;gap:2px;margin-bottom:3px;font-size:8.5px}
+  .chip{padding:1px 4px}
+  #bottom button{padding:3px 2px;font-size:8.5px;border-radius:6px}
+  #bottom button small{font-size:7.5px}
+  #bottom #serve{font-size:10px}
+  #clear{margin-top:3px!important;padding:2px!important;font-size:8.5px!important}
+  #meter{height:13px;margin-bottom:4px}
+  #toolbar{max-width:calc(100vw - 255px)}
+  #driftBtn{left:140px!important}
+  #camBtn{left:140px!important}
+  #hornBtn{left:215px!important}
+  #fuelBtn{left:215px!important}
+  #towBtn{left:215px!important}
+}
 @media (max-aspect-ratio:1/1){
-  #toolbar{top:max(174px,calc(env(safe-area-inset-top) + 166px));max-width:calc(100vw - 12px)}
-  #terror{top:max(236px,calc(env(safe-area-inset-top) + 228px))!important}
-  #pad{bottom:calc(max(8px,env(safe-area-inset-bottom)) + 215px)}
+  #toolbar{top:max(142px,calc(env(safe-area-inset-top) + 134px));max-width:calc(100vw - 12px)}
+  #terror{top:max(204px,calc(env(safe-area-inset-top) + 196px))!important}
+  #pad{bottom:calc(max(8px,env(safe-area-inset-bottom)) + 190px)}
 }
 #vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.32) 100%)}
 </style>
@@ -5510,7 +5538,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-21-230018';
+const APP_VERSION = '2026-10-22-200627';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
