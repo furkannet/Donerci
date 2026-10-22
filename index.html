@@ -188,6 +188,7 @@ button small{font-size:9px;margin-top:0}
   <button id="endDay" title="Günü Bitir">🌙<span class="t"> Günü Bitir</span></button>
   <button id="charBtn" title="Karakter">🧑<span class="t"> Karakter</span></button>
   <button id="frBtn" title="Arkadaşlar">👥<span class="t"> Arkadaşlar</span></button>
+  <button id="leadBtn" title="Liderlik Tablosu">🏆<span class="t"> Liderlik</span></button>
   <button id="nightBtn" title="Gece">🌙<span class="t"> Gece</span></button>
   <button id="codeBtn" title="Kod">🎟<span class="t"> Kod</span></button>
   <button id="invBtn" title="Envanter">🎒<span class="t"> Envanter</span></button>
@@ -345,7 +346,17 @@ button small{font-size:9px;margin-top:0}
     <div id="frMsg" style="color:var(--bad);min-height:18px;font-size:13px;margin-top:4px;font-weight:600"></div>
     <button id="frAdd" class="wide" style="margin-top:4px">Ekle</button>
     <div id="frBody" style="text-align:left;font-size:14px;margin-top:8px"></div>
+    <h3>🏆 Liderlik Tablosu (En Çok Para)</h3>
+    <div id="pauseLeadBody" style="text-align:left;font-size:13px;margin-top:6px"></div>
     <button id="pauseResume" class="wide">▶ Devam</button>
+  </div>
+</div>
+<div id="leadModal" class="modal" style="z-index:22">
+  <div class="card">
+    <h2 style="text-align:center">🏆 Liderlik Tablosu</h2>
+    <p style="text-align:center;font-size:12px">En fazla parası olan 1. sırada yer alır.</p>
+    <div id="leadBody" style="font-size:14px;margin-top:8px"></div>
+    <button id="leadClose" class="wide">Kapat</button>
   </div>
 </div>
 <div id="frDelModal" class="modal" style="z-index:25">
@@ -2751,6 +2762,7 @@ function handleIncomingCoopMsg(msg){
     flash(`↩ ${msg.user} odadan ayrıldı`, '#7dd3fc');
   }
   if(escPaused) renderFriends();
+  if($('leadModal') && $('leadModal').style.display === 'flex') renderLeaderboard();
 }
 if(coopChan){ coopChan.onmessage = ev => handleIncomingCoopMsg(ev.data); }
 async function pollOnlineStatus(){
@@ -2787,6 +2799,7 @@ async function pollOnlineStatus(){
       });
     }
     if(escPaused) renderFriends();
+    if($('leadModal') && $('leadModal').style.display === 'flex') renderLeaderboard();
   }catch(e){}
 }
 function connectOnlineWS(){
@@ -2860,6 +2873,78 @@ function isFriendActive(name){
   const k = name.toLowerCase();
   return !!(onlineFriends[k] && onlineFriends[k].ts && (Date.now() - onlineFriends[k].ts < 120000));
 }
+function buildLeaderboardEntries(){
+  const map = {};
+  const addEntry = (user, money, level, isMe) => {
+    if(!user) return;
+    const k = String(user).toLowerCase();
+    const m = Math.max(0, Number(money) || 0);
+    const lv = Math.max(1, Number(level) || 1);
+    if(!map[k] || isMe || m >= map[k].money){
+      map[k] = {user: isMe ? user : (map[k] ? map[k].user : user), money: m, level: lv, isMe: !!(isMe || (map[k] && map[k].isMe)), online: isMe ? true : isFriendActive(user)};
+    }
+  };
+  try{
+    for(let i = 0; i < localStorage.length; i++){
+      const key = localStorage.key(i);
+      if(key && key.startsWith('donerAcct_')){
+        const st = JSON.parse(localStorage.getItem(key) || 'null');
+        if(st && (st.realAccount || (st.settings && st.settings.name))){
+          const nm = (st.settings && st.settings.name) || key.slice(10);
+          addEntry(nm, st.money, st.level, false);
+        }
+      }
+    }
+  }catch(e){}
+  Object.keys(knownPlayers).forEach(k => {
+    const p = knownPlayers[k];
+    if(p && p.user && p.state) addEntry(p.user, p.state.money, p.state.level, false);
+  });
+  Object.keys(onlineFriends).forEach(k => {
+    const p = onlineFriends[k];
+    if(p && p.user && p.state) addEntry(p.user, p.state.money, p.state.level, false);
+  });
+  getFriends().forEach(n => {
+    if(doesPlayerExist(n)){
+      const acct = getOrCreateFriendAcct(n);
+      addEntry(n, acct.money, acct.level, false);
+    }
+  });
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Sen';
+  addEntry(myName, S.money, S.level || 1, true);
+  return Object.values(map).sort((a, b) => (b.money - a.money) || (b.level - a.level));
+}
+function renderLeaderboardHTML(entries){
+  if(!entries.length) return '<i style="color:var(--mut)">Henüz oyuncu yok.</i>';
+  return entries.map((e, i) => {
+    const rank = i + 1;
+    const medal = rank === 1 ? '🥇 1.' : rank === 2 ? '🥈 2.' : rank === 3 ? '🥉 3.' : `${rank}.`;
+    const bg = rank === 1 ? 'rgba(255,176,32,.18)' : (e.isMe ? 'rgba(74,222,128,.12)' : 'rgba(255,255,255,.05)');
+    const border = rank === 1 ? '#ffb020' : (e.isMe ? '#4ade80' : 'var(--line)');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:5px;padding:7px 10px;border-radius:8px;background:${bg};border:1px solid ${border}">` +
+      `<div><b style="color:${rank === 1 ? '#ffd54a' : 'var(--ink)'};margin-right:6px">${medal}</b>` +
+      `<span style="color:${e.online ? '#4ade80' : '#9ca3af'}">●</span> <b>${e.user}</b>${e.isMe ? ' <small style="color:#4ade80">(Sen)</small>' : ''} ` +
+      `<small style="color:var(--mut)">· Sv.${e.level}</small></div>` +
+      `<b style="color:#ffd54a">${e.money.toLocaleString('tr-TR')}₺</b></div>`;
+  }).join('');
+}
+function renderLeaderboard(){
+  const entries = buildLeaderboardEntries();
+  const html = renderLeaderboardHTML(entries);
+  if($('leadBody')) $('leadBody').innerHTML = html;
+  if($('pauseLeadBody')) $('pauseLeadBody').innerHTML = html;
+}
+$('leadBtn').onclick = () => {
+  broadcastCoopPos(true);
+  pollOnlineStatus();
+  renderLeaderboard();
+  setOpen = true;
+  $('leadModal').style.display = 'flex';
+};
+$('leadClose').onclick = () => {
+  $('leadModal').style.display = 'none';
+  if(!escPaused) setOpen = false;
+};
 function renderFriends(){
   const banner = $('acctBanner');
   if(banner){
@@ -2927,6 +3012,7 @@ function renderFriends(){
     box.appendChild(row);
   });
   $('frList').innerHTML = list.map(n => `<option value="${n}">`).join('');
+  renderLeaderboard();
 }
 $('frIn').oninput = () => { if($('frMsg')) $('frMsg').textContent = ''; };
 $('frAdd').onclick = async () => {
@@ -6049,7 +6135,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-211601';
+const APP_VERSION = '2026-10-22-212105';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
