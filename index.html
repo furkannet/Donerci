@@ -487,6 +487,7 @@ const DEF = {
 let activeFriendAcct = null; // aktif arkadaşın haritasındaysak arkadaşın adı, kendi haritamızdaysak null
 let activeFriendMapState = null; // arkadaşın haritasının eşya/araba durumu
 let friendMapCarMesh = null; // arkadaşın haritasındaki park halindeki arabası
+const roomPeers = {}; // { [lowerName]: { name, g, x, z, tx, tz, yaw, targetYaw, ph, liveTs, legL, legR, armL, armR } }
 let lastNetSync = 0;
 const onlineFriends = {}; // { [lowerName]: { user, state, ts } }
 function normalizeState(o){
@@ -2167,10 +2168,11 @@ function renderStats(){
   const m = Math.floor(t / 60), s = Math.floor(t % 60);
   const goal = goalFor(S.day);
   const hearts = '❤'.repeat(Math.max(0, can)) + '♡'.repeat(Math.max(0, MAX_LIVES - can));
+  const peerNames = Object.values(roomPeers).map(p => p.name);
   $('stats').innerHTML =
     (activeFriendAcct
       ? `<div style="margin-bottom:2px;color:#4ade80">🗺 <b>${activeFriendAcct}</b> Haritası <button id="backMyAcct" style="padding:1px 5px;font-size:9px;background:#1e3a52;border-color:#4ade80;margin-left:2px">↩ Kendi Haritana Dön</button></div>`
-      : '') +
+      : (peerNames.length ? `<div style="margin-bottom:2px;color:#4ade80">🟢 Odadakiler: <b>${peerNames.join(', ')}</b></div>` : '')) +
     (S.settings.name ? `<b>${S.settings.name}</b><br>` : '') +
     `<span id="lvlBtn" style="cursor:pointer;text-decoration:underline">Seviye <b>${S.level || 1}</b> <small>(${Math.max(0, xpFor((S.level || 1) + 1) - (S.xp || 0)).toLocaleString('tr-TR')}₺ kaldı)</small></span> · Gün <b>${S.day}</b> · ${m}:${String(s).padStart(2,'0')}<br>` +
     (() => { const lv = S.level || 1, lo = xpFor(lv), hi = xpFor(lv + 1); const pct = Math.min(100, Math.max(0, ((S.xp || 0) - lo) / (hi - lo) * 100)); return `<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:2px 0 4px">` + `<i style="display:block;height:100%;width:${pct}%;background:#ffd54a"></i></div>`; })() +
@@ -2610,8 +2612,9 @@ function spawnFriendMapCar(st){
   friendMapCarMesh.rotation.y = Math.PI;
   scene.add(friendMapCarMesh);
 }
-function spawnFriendCompanion(name, startX, startZ){
-  if(friendComp && friendComp.g) scene.remove(friendComp.g);
+function spawnRoomPeer(name, startX, startZ, startYaw){
+  const k = name.toLowerCase();
+  if(roomPeers[k] && roomPeers[k].g) scene.remove(roomPeers[k].g);
   const acct = getOrCreateFriendAcct(name);
   const lk = acct.look || DEF.look;
   const g = human(lk.shirt, lk.pants, lk.skin, lk.hair);
@@ -2621,12 +2624,34 @@ function spawnFriendCompanion(name, startX, startZ){
   const fz = typeof startZ === 'number' ? startZ : (D.z - 1.2);
   g.position.set(fx, 0, fz);
   scene.add(g);
-  friendComp = {
-    name, g, x: fx, z: fz, tx: fx, tz: fz, yaw: 0, ph: 0,
-    waitT: 1.5, serveT: 14, shootT: 0, liveTs: 0,
+  const peer = {
+    name, g, x: fx, z: fz, tx: fx, tz: fz, yaw: (startYaw || 0) + Math.PI, targetYaw: startYaw || 0, ph: 0,
+    liveTs: Date.now(),
     legL: g.getObjectByName('legL'), legR: g.getObjectByName('legR'),
     armL: g.getObjectByName('armL'), armR: g.getObjectByName('armR')
   };
+  roomPeers[k] = peer;
+  friendComp = peer;
+  return peer;
+}
+function removeRoomPeer(name){
+  const k = String(name).toLowerCase();
+  const p = roomPeers[k];
+  if(p){
+    if(p.g) scene.remove(p.g);
+    delete roomPeers[k];
+  }
+  if(friendComp && friendComp.name.toLowerCase() === k) friendComp = null;
+}
+function clearAllRoomPeers(){
+  Object.keys(roomPeers).forEach(k => {
+    if(roomPeers[k] && roomPeers[k].g) scene.remove(roomPeers[k].g);
+    delete roomPeers[k];
+  });
+  friendComp = null;
+}
+function spawnFriendCompanion(name, startX, startZ){
+  return spawnRoomPeer(name, startX, startZ, 0);
 }
 function enterFriendAccount(name){
   if(!doesPlayerExist(name)){
@@ -2639,12 +2664,13 @@ function enterFriendAccount(name){
     flash(`${name} şu an çevrimdışı! Aktif olunca oynanabilir.`, '#f87171');
     return;
   }
+  clearAllRoomPeers();
   const on = onlineFriends[name.toLowerCase()];
   const fx = (on && typeof on.x === 'number') ? on.x : (D.x - 2.0);
   const fz = (on && typeof on.z === 'number') ? on.z : (D.z - 1.2);
   activeFriendAcct = name;
   activeFriendMapState = getOrCreateFriendAcct(name);
-  spawnFriendCompanion(name, fx, fz);
+  spawnRoomPeer(name, fx, fz, on && on.yaw);
   spawnFriendMapCar(activeFriendMapState);
   // Kendi hesabında kalarak arkadaşının haritasına ışınlan
   if(!C.driving && !D.driving && !CM.driving){
@@ -2662,8 +2688,7 @@ function returnToMyAccount(){
   const prev = activeFriendAcct;
   activeFriendAcct = null;
   activeFriendMapState = null;
-  if(friendComp && friendComp.g) scene.remove(friendComp.g);
-  friendComp = null;
+  clearAllRoomPeers();
   if(friendMapCarMesh){ scene.remove(friendMapCarMesh); friendMapCarMesh = null; }
   broadcastCoopPos(true);
   renderAll();
@@ -2674,10 +2699,11 @@ let lastCoopBroadcast = 0;
 function broadcastCoopPos(force){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user);
   if(!myName) return;
-  const pkt = {type: 'pos', user: myName, target: activeFriendAcct || '', x: P.x, z: P.z, yaw: P.yaw, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
+  const currentRoom = activeFriendAcct || myName;
+  const pkt = {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: P.x, z: P.z, yaw: P.yaw, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const now = Date.now();
-  if(!force && now - lastCoopBroadcast < 2000) return;
+  if(!force && now - lastCoopBroadcast < 900) return;
   lastCoopBroadcast = now;
   try{
     fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
@@ -2693,27 +2719,34 @@ function handleIncomingCoopMsg(msg){
   if(myName && msg.user.toLowerCase() === myName.toLowerCase()) return;
   const k = String(msg.user).toLowerCase();
   registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, msg.ts || Date.now());
-  // Eğer o arkadaşımız bizim haritamıza katılmışsa onu kendi haritamızda göster ve birbirimizin arkadaşı olalım
-  if(msg.target && myName && msg.target.toLowerCase() === myName.toLowerCase()){
+  const myRoom = (activeFriendAcct || myName || '').toLowerCase();
+  const msgRoom = (msg.room || msg.target || msg.user || '').toLowerCase();
+  const joinedMyOwnRoom = !activeFriendAcct && myName && (
+    (msg.target && msg.target.toLowerCase() === myName.toLowerCase()) ||
+    (msg.room && msg.room.toLowerCase() === myName.toLowerCase())
+  );
+  const inSameRoom = myRoom && (msgRoom === myRoom || (activeFriendAcct && activeFriendAcct.toLowerCase() === k));
+  if(joinedMyOwnRoom || inSameRoom){
     const list = getFriends();
-    if(!list.some(x => x.toLowerCase() === msg.user.toLowerCase())){
+    if(!list.some(x => x.toLowerCase() === k)){
       list.push(msg.user);
       try{ localStorage.setItem('donerFriends', JSON.stringify(list)); }catch(e){}
     }
-    if(!activeFriendAcct){
-      activeFriendAcct = msg.user;
-      spawnFriendCompanion(msg.user, onlineFriends[k].x, onlineFriends[k].z);
+    if(!roomPeers[k]){
+      spawnRoomPeer(msg.user, onlineFriends[k].x, onlineFriends[k].z, onlineFriends[k].yaw);
       renderAll();
-      flash(`🗺 ${msg.user} senin haritana katıldı!`, '#4ade80');
+      if(joinedMyOwnRoom) flash(`🟢 ${msg.user} senin odana (haritana) katıldı!`, '#4ade80');
     }
-  }
-  if(friendComp && friendComp.name.toLowerCase() === k){
-    if(typeof msg.x === 'number'){
-      friendComp.tx = msg.x;
-      friendComp.tz = msg.z;
+    const peer = roomPeers[k];
+    if(peer){
+      if(typeof msg.x === 'number'){ peer.tx = msg.x; peer.tz = msg.z; }
+      if(typeof msg.yaw === 'number') peer.targetYaw = msg.yaw;
+      peer.liveTs = Date.now();
     }
-    if(typeof msg.yaw === 'number') friendComp.targetYaw = msg.yaw;
-    friendComp.liveTs = Date.now();
+  } else if(roomPeers[k] && (!activeFriendAcct || activeFriendAcct.toLowerCase() !== k)){
+    removeRoomPeer(msg.user);
+    renderAll();
+    flash(`↩ ${msg.user} odadan ayrıldı`, '#7dd3fc');
   }
   if(escPaused) renderFriends();
 }
@@ -2750,34 +2783,46 @@ if(coopChan){ coopChan.onmessage = ev => handleIncomingCoopMsg(ev.data); }
   setTimeout(() => broadcastCoopPos(true), 1200);
 })();
 function updateFriendCompanion(dt){
-  if(activeFriendAcct && (!friendComp || !friendComp.g)){
+  if(activeFriendAcct && !roomPeers[activeFriendAcct.toLowerCase()]){
     spawnFriendCompanion(activeFriendAcct);
   }
-  if(!friendComp || !friendComp.g) return;
-  broadcastCoopPos(false);
-  const fc = friendComp;
-  // BOT YOK: Yalnızca gerçek oyuncudan gelen canlı konum verisine göre hareket eder
-  const dx = fc.tx - fc.x, dz = fc.tz - fc.z;
-  const dist = Math.hypot(dx, dz);
-  if(dist > 0.05){
-    const stepSp = Math.min(dist, Math.max(4.5, dist * 5) * dt);
-    fc.x += (dx / dist) * stepSp;
-    fc.z += (dz / dist) * stepSp;
-    fc.yaw = Math.atan2(dx, dz);
-    fc.ph += dt * 9;
-    legPose(fc.legL, Math.sin(fc.ph) * 0.6);
-    legPose(fc.legR, -Math.sin(fc.ph) * 0.6);
-    if(fc.armL) fc.armL.rotation.x = -Math.sin(fc.ph) * 0.45;
-    if(fc.armR) fc.armR.rotation.x = Math.sin(fc.ph) * 0.45;
-  } else {
-    if(typeof fc.targetYaw === 'number') fc.yaw = fc.targetYaw + Math.PI;
-    legPose(fc.legL, 0);
-    legPose(fc.legR, 0);
-    if(fc.armL) fc.armL.rotation.x = 0;
-    if(fc.armR) fc.armR.rotation.x = 0;
+  const keys = Object.keys(roomPeers);
+  if(activeFriendAcct || keys.length > 0){
+    broadcastCoopPos(false);
   }
-  fc.g.position.set(fc.x, 0, fc.z);
-  fc.g.rotation.y = fc.yaw;
+  const now = Date.now();
+  for(const k of keys){
+    const fc = roomPeers[k];
+    if(!fc || !fc.g) continue;
+    // Uzun süre bağlantı kesilirse kendi odamızdaki misafiri kaldır
+    if((!activeFriendAcct || activeFriendAcct.toLowerCase() !== k) && (now - fc.liveTs > 70000)){
+      removeRoomPeer(fc.name);
+      renderAll();
+      continue;
+    }
+    // BOT YOK: Yalnızca gerçek oyuncudan gelen canlı konum verisine göre hareket eder
+    const dx = fc.tx - fc.x, dz = fc.tz - fc.z;
+    const dist = Math.hypot(dx, dz);
+    if(dist > 0.05){
+      const stepSp = Math.min(dist, Math.max(4.5, dist * 5) * dt);
+      fc.x += (dx / dist) * stepSp;
+      fc.z += (dz / dist) * stepSp;
+      fc.yaw = Math.atan2(dx, dz);
+      fc.ph += dt * 9;
+      legPose(fc.legL, Math.sin(fc.ph) * 0.6);
+      legPose(fc.legR, -Math.sin(fc.ph) * 0.6);
+      if(fc.armL) fc.armL.rotation.x = -Math.sin(fc.ph) * 0.45;
+      if(fc.armR) fc.armR.rotation.x = Math.sin(fc.ph) * 0.45;
+    } else {
+      if(typeof fc.targetYaw === 'number') fc.yaw = fc.targetYaw + Math.PI;
+      legPose(fc.legL, 0);
+      legPose(fc.legR, 0);
+      if(fc.armL) fc.armL.rotation.x = 0;
+      if(fc.armR) fc.armR.rotation.x = 0;
+    }
+    fc.g.position.set(fc.x, 0, fc.z);
+    fc.g.rotation.y = fc.yaw;
+  }
 }
 // arkadaş listesi (yalnızca gerçek ve aktif arkadaşlarla oynanabilir)
 function getFriends(){ try{ return JSON.parse(localStorage.getItem('donerFriends') || '[]'); }catch(e){ return []; } }
@@ -2788,11 +2833,15 @@ function isFriendActive(name){
 function renderFriends(){
   const banner = $('acctBanner');
   if(banner){
+    const peerNames = Object.values(roomPeers).map(p => p.name);
     if(activeFriendAcct){
       banner.style.display = 'block';
       banner.innerHTML = `🗺 Şu an <b>${activeFriendAcct}</b> haritasındasın <small>(kendi hesabınla)</small> <button id="bannerBackBtn" style="margin-left:8px;padding:4px 10px;font-size:12px;background:#1e3a52;border-color:#4ade80">↩ Kendi Haritana Dön</button>`;
       const bb = $('bannerBackBtn');
       if(bb) bb.onclick = returnToMyAccount;
+    } else if(peerNames.length){
+      banner.style.display = 'block';
+      banner.innerHTML = `🟢 Şu an odanda (haritanda) olanlar: <b>${peerNames.join(', ')}</b>`;
     } else {
       banner.style.display = 'none';
     }
@@ -5962,7 +6011,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-210117';
+const APP_VERSION = '2026-10-22-210536';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
