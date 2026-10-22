@@ -2492,7 +2492,7 @@ function makeNameSprite(text){
   return sp;
 }
 const knownPlayers = {}; // sunucudan / ağdan bilinen tüm gerçek oyuncular
-function registerKnownPlayer(user, stateObj, x, z, yaw){
+function registerKnownPlayer(user, stateObj, x, z, yaw, msgTs){
   if(!user) return;
   const k = String(user).toLowerCase();
   const st = normalizeState(stateObj || (onlineFriends[k] && onlineFriends[k].state) || (knownPlayers[k] && knownPlayers[k].state) || DEF);
@@ -2500,13 +2500,15 @@ function registerKnownPlayer(user, stateObj, x, z, yaw){
   st.realAccount = true;
   knownPlayers[k] = {user, state: st};
   try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
+  const prevTs = (onlineFriends[k] && onlineFriends[k].ts) || 0;
+  const newTs = typeof msgTs === 'number' ? msgTs : prevTs;
   onlineFriends[k] = {
     user,
     state: st,
     x: typeof x === 'number' ? x : ((onlineFriends[k] && onlineFriends[k].x) || (D.x - 2.0)),
     z: typeof z === 'number' ? z : ((onlineFriends[k] && onlineFriends[k].z) || (D.z - 1.2)),
-    yaw: yaw || 0,
-    ts: Date.now()
+    yaw: yaw || (onlineFriends[k] && onlineFriends[k].yaw) || 0,
+    ts: Math.max(prevTs, newTs)
   };
 }
 function doesPlayerExist(name){
@@ -2521,8 +2523,41 @@ function doesPlayerExist(name){
   }catch(e){}
   return false;
 }
+function handleFriendEvent(msg){
+  if(!msg || !msg.from || !msg.to) return;
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
+  if(!myName || msg.to.toLowerCase() !== myName.toLowerCase()) return;
+  if(msg.type === 'friend_add'){
+    const list = getFriends();
+    if(!list.some(x => x.toLowerCase() === msg.from.toLowerCase())){
+      list.push(msg.from);
+      try{ localStorage.setItem('donerFriends', JSON.stringify(list)); }catch(e){}
+      flash(`👥 ${msg.from} seni arkadaş olarak ekledi!`, '#4ade80');
+      if(escPaused) renderFriends();
+    }
+  } else if(msg.type === 'friend_del'){
+    const list = getFriends();
+    const rest = list.filter(x => x.toLowerCase() !== msg.from.toLowerCase());
+    if(rest.length !== list.length){
+      try{ localStorage.setItem('donerFriends', JSON.stringify(rest)); }catch(e){}
+      if(activeFriendAcct && activeFriendAcct.toLowerCase() === msg.from.toLowerCase()) returnToMyAccount();
+      if(escPaused) renderFriends();
+    }
+  }
+}
+function broadcastFriendEvent(type, toUser){
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
+  if(!myName || !toUser) return;
+  const pkt = {type, user: myName, from: myName, to: toUser, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
+  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+  try{
+    fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
+      method: 'POST',
+      body: JSON.stringify(pkt)
+    }).catch(() => {});
+  }catch(e){}
+}
 async function checkPlayerExistsAsync(name){
-  if(doesPlayerExist(name)) return true;
   try{
     const r = await fetch('https://ntfy.sh/doner_sim_furkannet_online_v1/json?poll=1&since=24h');
     if(r.ok){
@@ -2533,7 +2568,9 @@ async function checkPlayerExistsAsync(name){
           const outer = JSON.parse(line);
           if(outer && outer.message){
             const msg = JSON.parse(outer.message);
-            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw);
+            const mTs = msg.ts || (outer.time ? outer.time * 1000 : 0);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, mTs);
+            if(msg && (msg.type === 'friend_add' || msg.type === 'friend_del')) handleFriendEvent(msg);
           }
         }catch(e){}
       });
@@ -2597,6 +2634,11 @@ function enterFriendAccount(name){
     flash('Öyle bir oyuncu yok!', '#f87171');
     return;
   }
+  if(!isFriendActive(name)){
+    if($('frMsg')){ $('frMsg').style.color = '#f87171'; $('frMsg').textContent = `${name} şu an çevrimdışı! Aktif olunca oynanabilir.`; }
+    flash(`${name} şu an çevrimdışı! Aktif olunca oynanabilir.`, '#f87171');
+    return;
+  }
   const on = onlineFriends[name.toLowerCase()];
   const fx = (on && typeof on.x === 'number') ? on.x : (D.x - 2.0);
   const fz = (on && typeof on.z === 'number') ? on.z : (D.z - 1.2);
@@ -2613,7 +2655,7 @@ function enterFriendAccount(name){
   broadcastCoopPos(true);
   if(escPaused) togglePause();
   renderAll();
-  flash(`🗺 ${name} haritasına girdin! (Kendi hesabındasın)`, '#4ade80');
+  flash(`🗺 ${name} haritasına girdin! (Canlı oynuyorsunuz)`, '#4ade80');
 }
 function returnToMyAccount(){
   if(!activeFriendAcct) return;
@@ -2623,6 +2665,7 @@ function returnToMyAccount(){
   if(friendComp && friendComp.g) scene.remove(friendComp.g);
   friendComp = null;
   if(friendMapCarMesh){ scene.remove(friendMapCarMesh); friendMapCarMesh = null; }
+  broadcastCoopPos(true);
   renderAll();
   if(escPaused) renderFriends();
   flash(`↩ Kendi haritana döndün (${prev} haritasından çıkıldı)`, '#7dd3fc');
@@ -2634,7 +2677,7 @@ function broadcastCoopPos(force){
   const pkt = {type: 'pos', user: myName, target: activeFriendAcct || '', x: P.x, z: P.z, yaw: P.yaw, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const now = Date.now();
-  if(!force && now - lastCoopBroadcast < 2500) return;
+  if(!force && now - lastCoopBroadcast < 2000) return;
   lastCoopBroadcast = now;
   try{
     fetch('https://ntfy.sh/doner_sim_furkannet_online_v1', {
@@ -2645,20 +2688,31 @@ function broadcastCoopPos(force){
 }
 function handleIncomingCoopMsg(msg){
   if(!msg || !msg.user) return;
+  if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(myName && msg.user.toLowerCase() === myName.toLowerCase()) return;
   const k = String(msg.user).toLowerCase();
-  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw);
-  // Eğer o arkadaşımız bizim haritamıza katılmışsa onu kendi haritamızda göster
-  if(msg.target && myName && msg.target.toLowerCase() === myName.toLowerCase() && !activeFriendAcct){
-    activeFriendAcct = msg.user;
-    spawnFriendCompanion(msg.user, onlineFriends[k].x, onlineFriends[k].z);
-    renderAll();
-    flash(`🗺 ${msg.user} senin haritana katıldı!`, '#4ade80');
+  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, msg.ts || Date.now());
+  // Eğer o arkadaşımız bizim haritamıza katılmışsa onu kendi haritamızda göster ve birbirimizin arkadaşı olalım
+  if(msg.target && myName && msg.target.toLowerCase() === myName.toLowerCase()){
+    const list = getFriends();
+    if(!list.some(x => x.toLowerCase() === msg.user.toLowerCase())){
+      list.push(msg.user);
+      try{ localStorage.setItem('donerFriends', JSON.stringify(list)); }catch(e){}
+    }
+    if(!activeFriendAcct){
+      activeFriendAcct = msg.user;
+      spawnFriendCompanion(msg.user, onlineFriends[k].x, onlineFriends[k].z);
+      renderAll();
+      flash(`🗺 ${msg.user} senin haritana katıldı!`, '#4ade80');
+    }
   }
-  if(friendComp && friendComp.name.toLowerCase() === k && typeof msg.x === 'number'){
-    friendComp.tx = msg.x;
-    friendComp.tz = msg.z;
+  if(friendComp && friendComp.name.toLowerCase() === k){
+    if(typeof msg.x === 'number'){
+      friendComp.tx = msg.x;
+      friendComp.tz = msg.z;
+    }
+    if(typeof msg.yaw === 'number') friendComp.targetYaw = msg.yaw;
     friendComp.liveTs = Date.now();
   }
   if(escPaused) renderFriends();
@@ -2673,7 +2727,9 @@ if(coopChan){ coopChan.onmessage = ev => handleIncomingCoopMsg(ev.data); }
           const outer = JSON.parse(line);
           if(outer && outer.message){
             const msg = JSON.parse(outer.message);
-            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw);
+            const mTs = msg.ts || (outer.time ? outer.time * 1000 : 0);
+            if(msg && msg.user) registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, mTs);
+            if(msg && (msg.type === 'friend_add' || msg.type === 'friend_del')) handleFriendEvent(msg);
           }
         }catch(e){}
       });
@@ -2700,27 +2756,11 @@ function updateFriendCompanion(dt){
   if(!friendComp || !friendComp.g) return;
   broadcastCoopPos(false);
   const fc = friendComp;
-  const isLive = (Date.now() - fc.liveTs) < 4000;
-  if(!isLive){
-    // Arkadaş otonom olarak da seninle birlikte oynar: tezgâh, COMOGENE ve senin etrafında dolaşır, sipariş hazırlar, terörist vurur
-    fc.waitT -= dt;
-    if(fc.waitT <= 0){
-      const spots = [
-        [D.x - 1.6, D.z - 0.5],
-        [D.x - 2.2, D.z + 1.4],
-        [P.x + (Math.random() * 2.4 - 1.2), P.z + (Math.random() * 2.4 - 1.2)],
-        [6.8, -11.5],
-        [-2.8, -6.0]
-      ];
-      const sp = pick(spots);
-      fc.tx = sp[0]; fc.tz = sp[1];
-      fc.waitT = 3.5 + Math.random() * 4;
-    }
-  }
+  // BOT YOK: Yalnızca gerçek oyuncudan gelen canlı konum verisine göre hareket eder
   const dx = fc.tx - fc.x, dz = fc.tz - fc.z;
   const dist = Math.hypot(dx, dz);
-  if(dist > 0.08){
-    const stepSp = Math.min(dist, 3.4 * dt);
+  if(dist > 0.05){
+    const stepSp = Math.min(dist, Math.max(4.5, dist * 5) * dt);
     fc.x += (dx / dist) * stepSp;
     fc.z += (dz / dist) * stepSp;
     fc.yaw = Math.atan2(dx, dz);
@@ -2730,8 +2770,7 @@ function updateFriendCompanion(dt){
     if(fc.armL) fc.armL.rotation.x = -Math.sin(fc.ph) * 0.45;
     if(fc.armR) fc.armR.rotation.x = Math.sin(fc.ph) * 0.45;
   } else {
-    // Dururken yüzünü sana veya tezgâha dönsün
-    fc.yaw = Math.atan2(P.x - fc.x, P.z - fc.z);
+    if(typeof fc.targetYaw === 'number') fc.yaw = fc.targetYaw + Math.PI;
     legPose(fc.legL, 0);
     legPose(fc.legR, 0);
     if(fc.armL) fc.armL.rotation.x = 0;
@@ -2739,33 +2778,12 @@ function updateFriendCompanion(dt){
   }
   fc.g.position.set(fc.x, 0, fc.z);
   fc.g.rotation.y = fc.yaw;
-  // Yakında terörist varsa arkadaşın da ateş edip yardım etsin
-  fc.shootT -= dt;
-  if(fc.shootT <= 0 && typeof terrorists !== 'undefined' && terrorists.length){
-    const aliveT = terrorists.find(t => !t.dead && Math.hypot(t.g.position.x - fc.x, t.g.position.z - fc.z) < 24);
-    if(aliveT){
-      fc.shootT = 1.4;
-      fc.g.rotation.y = Math.atan2(aliveT.g.position.x - fc.x, aliveT.g.position.z - fc.z);
-      if(typeof gunshotSound === 'function') gunshotSound('tabanca');
-      if(typeof hitTerrorist === 'function') hitTerrorist(aliveT);
-    }
-  }
-  // Belirli aralıklarla arkadaşın da sipariş hazırlayıp kazanca katkı sağlasın
-  fc.serveT -= dt;
-  if(fc.serveT <= 0){
-    fc.serveT = 16 + Math.random() * 8;
-    const bonus = 35 + ((Math.random() * 30) | 0);
-    S.money += bonus;
-    shiftEarned += bonus;
-    save();
-    renderAll();
-    flash(`🥙 ${fc.name} müşteri servisi yaptı! +${bonus}₺`, '#4ade80');
-  }
 }
-// arkadaş listesi (aktif arkadaşların yanına gidip birlikte oynanabilir)
+// arkadaş listesi (yalnızca gerçek ve aktif arkadaşlarla oynanabilir)
 function getFriends(){ try{ return JSON.parse(localStorage.getItem('donerFriends') || '[]'); }catch(e){ return []; } }
 function isFriendActive(name){
-  return doesPlayerExist(name);
+  const k = name.toLowerCase();
+  return !!(onlineFriends[k] && onlineFriends[k].ts && (Date.now() - onlineFriends[k].ts < 65000));
 }
 function renderFriends(){
   const banner = $('acctBanner');
@@ -2784,21 +2802,24 @@ function renderFriends(){
   box.innerHTML = '';
   if(!list.length){ box.innerHTML = '<i style="color:var(--mut)">Henüz arkadaş yok. Yukarıdan arkadaş ekle!</i>'; }
   list.forEach(n => {
+    const exists = doesPlayerExist(n);
     const acct = getOrCreateFriendAcct(n);
     const isAct = isFriendActive(n);
     const inThis = activeFriendAcct && activeFriendAcct.toLowerCase() === n.toLowerCase();
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--line)';
     const info = document.createElement('div');
-    info.innerHTML = `<div><span style="color:${isAct ? '#4ade80' : '#f87171'}">●</span> <b>${n}</b> <small style="color:${isAct ? '#4ade80' : '#f87171'}">${isAct ? 'Haritası Açık' : 'Öyle bir oyuncu yok'}</small></div>` +
-      (isAct ? `<small style="color:var(--mut)">Seviye ${acct.level || 1} · ${(acct.money || 0).toLocaleString('tr-TR')}₺</small>` : '');
+    const statusText = !exists ? 'Öyle bir oyuncu yok' : (isAct ? 'Aktif (Oyunda)' : 'Çevrimdışı (Aktif Değil)');
+    const statusCol = !exists ? '#f87171' : (isAct ? '#4ade80' : '#9ca3af');
+    info.innerHTML = `<div><span style="color:${statusCol}">●</span> <b>${n}</b> <small style="color:${statusCol}">${statusText}</small></div>` +
+      (exists ? `<small style="color:var(--mut)">Seviye ${acct.level || 1} · ${(acct.money || 0).toLocaleString('tr-TR')}₺</small>` : '');
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:4px;align-items:center';
-    if(isAct){
+    if(exists){
       const enterBtn = document.createElement('button');
-      enterBtn.textContent = inThis ? '✓ Haritasındasın' : '🗺 Haritasına Gir';
-      enterBtn.disabled = !!inThis;
-      enterBtn.style.cssText = 'padding:5px 8px;font-size:12px;font-weight:600;background:' + (inThis ? '#222b38' : '#16a34a') + ';border-color:transparent';
+      enterBtn.textContent = inThis ? '✓ Haritasındasın' : (isAct ? '🗺 Haritasına Gir' : 'Çevrimdışı');
+      enterBtn.disabled = !!inThis || !isAct;
+      enterBtn.style.cssText = 'padding:5px 8px;font-size:12px;font-weight:600;background:' + (inThis || !isAct ? '#222b38' : '#16a34a') + ';border-color:transparent';
       enterBtn.onclick = () => enterFriendAccount(n);
       actions.appendChild(enterBtn);
     }
@@ -2809,6 +2830,7 @@ function renderFriends(){
       if(inThis) returnToMyAccount();
       const rest = getFriends().filter(x => x !== n);
       try{ localStorage.setItem('donerFriends', JSON.stringify(rest)); }catch(e){}
+      broadcastFriendEvent('friend_del', n);
       renderFriends();
       flash(`${n} arkadaşlıktan çıkarıldı`, '#ffd54a');
     };
@@ -2849,10 +2871,12 @@ $('frAdd').onclick = async () => {
   if(!list.some(x => x.toLowerCase() === canonicalName.toLowerCase())) list.push(canonicalName);
   try{ localStorage.setItem('donerFriends', JSON.stringify(list)); }catch(e){}
   getOrCreateFriendAcct(canonicalName);
+  broadcastFriendEvent('friend_add', canonicalName);
   $('frIn').value = '';
-  if(msgEl){ msgEl.style.color = '#4ade80'; msgEl.textContent = `${canonicalName} eklendi!`; }
+  const actNow = isFriendActive(canonicalName);
+  if(msgEl){ msgEl.style.color = '#4ade80'; msgEl.textContent = `${canonicalName} eklendi! (${actNow ? 'Aktif — Haritasına girebilirsin' : 'Şu an çevrimdışı'})`; }
   renderFriends();
-  flash(`${canonicalName} eklendi (🗺 Haritasına girebilirsin!)`, '#4ade80');
+  flash(`${canonicalName} arkadaş olarak eklendi!`, '#4ade80');
 };
 window.addEventListener('keydown', e => {
   if(e.key === 'Escape') togglePause();
@@ -5938,7 +5962,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-205401';
+const APP_VERSION = '2026-10-22-210117';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
