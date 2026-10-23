@@ -2642,9 +2642,10 @@ function handleFriendEvent(msg){
 function broadcastFriendEvent(type, toUser){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(!myName || !toUser) return;
-  const pkt = {type, user: myName, from: myName, to: toUser, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
+  const wp = getMyWorldPos();
+  const pkt = {type, user: myName, from: myName, to: toUser, target: toUser, room: activeFriendAcct || myName, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, car: S.car, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: Date.now()};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
-  postToRelays(pkt);
+  postToRelays(pkt, true);
 }
 async function checkPlayerExistsAsync(name){
   requestOnlinePing();
@@ -2836,9 +2837,9 @@ function requestOnlinePing(){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(!myName) return;
   const wp = getMyWorldPos();
-  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
+  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, car: S.car, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
-  postToRelays(pkt);
+  postToRelays(pkt, true);
 }
 function broadcastCoopPos(force){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user);
@@ -3197,11 +3198,12 @@ function updateFriendCompanion(dt){
     }
     fc.g.position.set(fc.x, 0, fc.z);
     fc.g.rotation.y = fc.yaw;
-    // Diğer oyuncunun arabası: hem park halindeyken hem de sürerken diğer ekranda görünsün
+    // Diğer oyuncunun arabası: hem park halindeyken hem de sürerken diğer ekranda (oda sahibinde de) görünsün
     const on = onlineFriends[k];
-    const peerCarId = (on && on.car) || (on && on.state && on.state.car);
-    const peerMods = (on && on.mods) || (on && on.state && on.state.mods) || {};
-    const peerPlate = (on && on.plate) || (on && on.state && on.state.plate) || '06 ABC 123';
+    const peerAcct = (on && on.state) || (knownPlayers[k] && knownPlayers[k].state) || getOrCreateFriendAcct(fc.name);
+    const peerCarId = (on && on.car) || (peerAcct && peerAcct.car);
+    const peerMods = (on && on.mods && Object.keys(on.mods).length ? on.mods : (peerAcct && peerAcct.mods)) || {};
+    const peerPlate = (on && on.plate) || (peerAcct && peerAcct.plate) || '06 ABC 123';
     const isDrivingCar = !!(on && on.driving);
     fc.g.visible = !isDrivingCar;
     if(peerCarId){
@@ -3211,8 +3213,13 @@ function updateFriendCompanion(dt){
         fc.carMesh = buildPeerCarMesh(peerCarId, peerMods, peerPlate, fc.name);
         fc.carSignature = sig;
         if(fc.carMesh){
-          fc.cx = (on && typeof on.cx === 'number') ? on.cx : -6.5;
-          fc.cz = (on && typeof on.cz === 'number') ? on.cz : -24;
+          let initCx = (on && typeof on.cx === 'number') ? on.cx : -6.5;
+          let initCz = (on && typeof on.cz === 'number') ? on.cz : -24;
+          if(!isDrivingCar && S.car && Math.hypot(initCx - C.x, initCz - C.z) < 2.5){
+            initCz -= 5.8;
+          }
+          fc.cx = initCx;
+          fc.cz = initCz;
           fc.ch = (on && typeof on.ch === 'number') ? on.ch : 0;
           fc.carMesh.position.set(fc.cx, 0, fc.cz);
           fc.carMesh.rotation.y = fc.ch + Math.PI;
@@ -3220,8 +3227,11 @@ function updateFriendCompanion(dt){
         }
       }
       if(fc.carMesh){
-        const targetCx = (on && typeof on.cx === 'number') ? on.cx : (isDrivingCar ? fc.tx : fc.cx);
-        const targetCz = (on && typeof on.cz === 'number') ? on.cz : (isDrivingCar ? fc.tz : fc.cz);
+        let targetCx = (on && typeof on.cx === 'number') ? on.cx : (isDrivingCar ? fc.tx : fc.cx);
+        let targetCz = (on && typeof on.cz === 'number') ? on.cz : (isDrivingCar ? fc.tz : fc.cz);
+        if(!isDrivingCar && S.car && Math.hypot(targetCx - C.x, targetCz - C.z) < 2.5){
+          targetCz -= 5.8;
+        }
         const targetCh = (on && typeof on.ch === 'number') ? on.ch : fc.ch;
         const targetSlip = (on && typeof on.cslip === 'number') ? on.cslip : 0;
         const cdx = targetCx - fc.cx, cdz = targetCz - fc.cz;
@@ -6542,7 +6552,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-195802';
+const APP_VERSION = '2026-10-23-200602';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
