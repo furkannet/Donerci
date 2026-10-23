@@ -408,6 +408,28 @@ button small{font-size:9px;margin-top:0}
     <button id="chatSend" style="padding:6px 10px;font-size:12px;background:#1e3a52;border-color:#4ade80">Gönder</button>
   </div>
 </div>
+<div id="radioModal" class="modal" style="z-index:26">
+  <div class="card" style="text-align:center;max-width:380px">
+    <h2>📻 Araba Radyosu (Şarkı Kodu)</h2>
+    <p style="font-size:12px;margin-bottom:8px">Hazır şarkı kodunu (ör. <b>101</b>..<b>106</b>), Roblox Boombox ID'sini veya YouTube/MP3 linkini yaz:</p>
+    <input id="radioCodeIn" placeholder="Şarkı kodu veya YouTube/MP3 kodu yaz..." style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#222b38;color:var(--ink);font-size:14px">
+    <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+      <button class="rQuick" data-c="101" style="padding:5px 8px;font-size:11px">101: Phonk</button>
+      <button class="rQuick" data-c="102" style="padding:5px 8px;font-size:11px">102: Tokyo Drift</button>
+      <button class="rQuick" data-c="103" style="padding:5px 8px;font-size:11px">103: Coffin Dance</button>
+      <button class="rQuick" data-c="104" style="padding:5px 8px;font-size:11px">104: Erik Dalı</button>
+      <button class="rQuick" data-c="105" style="padding:5px 8px;font-size:11px">105: Megalovania</button>
+      <button class="rQuick" data-c="106" style="padding:5px 8px;font-size:11px">106: İzmir Marşı</button>
+    </div>
+    <div id="radioYtWrap" style="display:none;margin-top:8px;border-radius:8px;overflow:hidden;background:#000"></div>
+    <div id="radioStatus" style="color:#c084fc;min-height:18px;font-size:12px;margin-top:6px;font-weight:700"></div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button id="radioPlayBtn" class="wide" style="margin:0;background:#16a34a;border-color:#4ade80">▶ Çal</button>
+      <button id="radioStopBtn" class="wide" style="margin:0;background:#b91c1c;border-color:transparent">⏹ Durdur</button>
+      <button id="radioCloseBtn" class="wide" style="margin:0">Kapat</button>
+    </div>
+  </div>
+</div>
 <div id="prof" class="modal">
   <div class="card">
     <h2>Profil</h2>
@@ -2780,6 +2802,13 @@ function handleSpecialCoopEvent(msg){
   } else if(msg.type === 'race_win'){
     processedCoopEvents.add(msg.id);
     if(typeof finishCoopRace === 'function') finishCoopRace(msg.user || 'Oyuncu', false);
+  } else if(msg.type === 'radio_sync'){
+    if(myName && msg.user && msg.user.toLowerCase() === myName.toLowerCase()) return;
+    processedCoopEvents.add(msg.id);
+    if(passengerOf && msg.user && passengerOf === msg.user.toLowerCase()){
+      if(msg.code && typeof playRadioByCode === 'function') playRadioByCode(msg.code, true);
+      else if(typeof stopCarRadio === 'function') stopCarRadio(true);
+    }
   }
 }
 const knownPlayers = {}; // sunucudan / ağdan bilinen tüm gerçek oyuncular
@@ -3142,7 +3171,7 @@ function broadcastCoopPos(force){
 function handleIncomingCoopMsg(msg){
   if(!msg || !msg.user) return;
   if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
-  if(msg.type === 'chat' || msg.type === 'money_send' || msg.type === 'shoot' || msg.type === 'emote' || msg.type === 'race_start' || msg.type === 'race_win'){
+  if(msg.type === 'chat' || msg.type === 'money_send' || msg.type === 'shoot' || msg.type === 'emote' || msg.type === 'race_start' || msg.type === 'race_win' || msg.type === 'radio_sync'){
     handleSpecialCoopEvent(msg);
     return;
   }
@@ -3921,54 +3950,135 @@ function triggerDanceAndFirework(){
 }
 if($('emoteBtn')) $('emoteBtn').onclick = triggerDanceAndFirework;
 
-// Araba Radyosu (WebAudio sentezleyici: 3 kanal)
-const RADIO_CHANNELS = [
-  {name: 'Kapalı', notes: []},
-  {name: 'Phonk Bass', tempo: 170, type: 'sawtooth', notes: [110, 110, 130.8, 110, 146.8, 130.8, 98, 110]},
-  {name: 'Retro Synth', tempo: 150, type: 'square', notes: [261.6, 329.6, 392.0, 523.2, 392.0, 329.6, 293.7, 349.2]},
-  {name: 'Oyun Havası', tempo: 135, type: 'triangle', notes: [440, 493.9, 554.4, 587.3, 659.3, 587.3, 554.4, 493.9]}
-];
-let radioChanIdx = 0, radioStep = 0, radioTimer = null;
-function stopCarRadio(){
-  radioChanIdx = 0;
+// Araba Radyosu (Şarkı Kodu ile Çalma: Hazır Kodlar, Roblox ID, YouTube Kodu veya Ses Linki)
+const SONG_CODES = {
+  '101': {name: 'Phonk Drift', tempo: 155, type: 'sawtooth', notes: [110, 110, 130.8, 110, 146.8, 130.8, 98, 110, 110, 130.8, 164.8, 146.8]},
+  '102': {name: 'Tokyo Drift', tempo: 145, type: 'square', notes: [246.9, 246.9, 261.6, 246.9, 220, 196, 220, 246.9, 246.9, 261.6, 293.7, 261.6]},
+  '103': {name: 'Coffin Dance', tempo: 140, type: 'sawtooth', notes: [220, 220, 329.6, 293.7, 261.6, 246.9, 246.9, 246.9, 293.7, 261.6, 246.9, 220, 220, 440, 392, 440, 392, 440]},
+  '104': {name: 'Erik Dalı Oyun Havası', tempo: 135, type: 'triangle', notes: [329.6, 392, 440, 440, 493.9, 440, 392, 329.6, 392, 349.2, 329.6, 293.7, 293.7, 329.6, 349.2, 329.6]},
+  '105': {name: 'Megalovania', tempo: 125, type: 'square', notes: [293.7, 293.7, 587.3, 440, 0, 415.3, 0, 392, 0, 349.2, 293.7, 349.2, 392]},
+  '106': {name: 'İzmir Marşı', tempo: 165, type: 'sawtooth', notes: [220, 293.7, 293.7, 293.7, 329.6, 349.2, 329.6, 293.7, 329.6, 293.7, 261.6, 246.9, 220]}
+};
+let radioActiveName = '', radioStep = 0, radioTimer = null, radioAudioEl = null, activeSongObj = null;
+function broadcastRadioSync(codeStr){
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
+  const id = 'rs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  processedCoopEvents.add(id);
+  const pkt = {type: 'radio_sync', id, user: myName, code: codeStr || '', ts: Date.now()};
+  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+  postToRelays(pkt, true);
+}
+function stopCarRadio(fromSync){
+  radioActiveName = '';
+  activeSongObj = null;
   if(radioTimer){ clearInterval(radioTimer); radioTimer = null; }
+  if(radioAudioEl){ try{ radioAudioEl.pause(); radioAudioEl.src = ''; }catch(e){} radioAudioEl = null; }
+  if($('radioYtWrap')){ $('radioYtWrap').innerHTML = ''; $('radioYtWrap').style.display = 'none'; }
   if($('radioBtn')) $('radioBtn').textContent = '📻 Radyo: Kapalı';
+  if($('radioStatus')) $('radioStatus').textContent = 'Radyo kapalı.';
+  if(!fromSync && C.driving) broadcastRadioSync('');
 }
 function playRadioStep(){
-  if((!C.driving && !passengerOf) || escPaused || radioChanIdx === 0) return;
-  const ch = RADIO_CHANNELS[radioChanIdx];
-  if(!ch || !ch.notes.length) return;
-  const freq = ch.notes[radioStep % ch.notes.length];
+  if((!C.driving && !passengerOf) || escPaused || !activeSongObj) return;
+  const freq = activeSongObj.notes[radioStep % activeSongObj.notes.length];
   radioStep++;
+  if(!freq || freq <= 0) return;
   try{
     const ac = audioCtx(), t = ac.currentTime;
     const o = ac.createOscillator(), g = ac.createGain();
-    o.type = ch.type || 'sawtooth';
+    o.type = activeSongObj.type || 'sawtooth';
     o.frequency.setValueAtTime(freq, t);
-    g.gain.setValueAtTime(0.032, t);
+    g.gain.setValueAtTime(0.04, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
     o.connect(g); g.connect(ac.destination);
     o.start(t); o.stop(t + 0.14);
   }catch(e){}
 }
-function cycleCarRadio(){
-  if(!C.driving && !passengerOf) return;
-  radioChanIdx = (radioChanIdx + 1) % RADIO_CHANNELS.length;
-  radioStep = 0;
-  if(radioTimer){ clearInterval(radioTimer); radioTimer = null; }
-  const ch = RADIO_CHANNELS[radioChanIdx];
-  if($('radioBtn')) $('radioBtn').textContent = `📻 Radyo: ${ch.name}`;
-  if(radioChanIdx > 0){
-    radioTimer = setInterval(playRadioStep, ch.tempo || 160);
-    playRadioStep();
-    flash(`📻 Radyo Kanalı: ${ch.name}`, '#c084fc');
-  } else {
-    flash('📻 Radyo kapatıldı', '#9ca3af');
-  }
+function extractYouTubeId(str){
+  const s = str.trim();
+  if(/^[a-zA-Z0-9_-]{11}$/.test(s) && !/^\d+$/.test(s)) return s;
+  const m = s.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
 }
-if($('radioBtn')) $('radioBtn').onclick = cycleCarRadio;
+function generateProceduralSongFromCode(code){
+  let h = 2166136261;
+  for(let i = 0; i < code.length; i++){ h ^= code.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const scale = [196, 220, 246.9, 261.6, 293.7, 329.6, 349.2, 392, 440, 493.9, 523.2];
+  const notes = [];
+  for(let i = 0; i < 12; i++){
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    notes.push(scale[Math.abs(h) % scale.length]);
+  }
+  const types = ['sawtooth', 'square', 'triangle'];
+  return {name: 'Kod #' + code.slice(0, 10), tempo: 130 + (Math.abs(h) % 45), type: types[Math.abs(h) % 3], notes};
+}
+function playRadioByCode(rawCode, fromSync){
+  const code = String(rawCode || '').trim();
+  if(!code){
+    if($('radioStatus')) $('radioStatus').textContent = 'Lütfen bir şarkı kodu yaz!';
+    return;
+  }
+  stopCarRadio(true);
+  if(SONG_CODES[code]){
+    activeSongObj = SONG_CODES[code];
+    radioActiveName = activeSongObj.name;
+    radioStep = 0;
+    radioTimer = setInterval(playRadioStep, activeSongObj.tempo);
+    playRadioStep();
+  } else if(/^https?:\/\/.+\.(mp3|ogg|wav)(\?.*)?$/i.test(code)){
+    radioActiveName = 'MP3 Şarkı';
+    radioAudioEl = new Audio(code);
+    radioAudioEl.loop = true;
+    radioAudioEl.volume = 0.5;
+    radioAudioEl.play().catch(() => {});
+  } else if(extractYouTubeId(code)){
+    const ytId = extractYouTubeId(code);
+    radioActiveName = 'YT:' + ytId.slice(0, 6);
+    if($('radioYtWrap')){
+      $('radioYtWrap').style.display = 'block';
+      $('radioYtWrap').innerHTML = `<iframe width="100%" height="90" src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}" frameborder="0" allow="autoplay; encrypted-media"></iframe>`;
+    }
+  } else {
+    activeSongObj = generateProceduralSongFromCode(code);
+    radioActiveName = activeSongObj.name;
+    radioStep = 0;
+    radioTimer = setInterval(playRadioStep, activeSongObj.tempo);
+    playRadioStep();
+  }
+  if($('radioBtn')) $('radioBtn').textContent = `📻 ${radioActiveName}`;
+  if($('radioStatus')) $('radioStatus').textContent = `🎵 Çalıyor: ${radioActiveName} (Kod: ${code})`;
+  flash(`📻 Radyo Çalıyor: ${radioActiveName}`, '#c084fc');
+  if(!fromSync && C.driving) broadcastRadioSync(code);
+}
+function openRadioModal(){
+  if(!C.driving && !passengerOf) return;
+  if($('radioModal')) $('radioModal').style.display = 'flex';
+  if($('radioCodeIn')) $('radioCodeIn').focus();
+}
+if($('radioBtn')) $('radioBtn').onclick = openRadioModal;
+if($('radioCloseBtn')) $('radioCloseBtn').onclick = () => { if($('radioModal')) $('radioModal').style.display = 'none'; };
+if($('radioStopBtn')) $('radioStopBtn').onclick = () => stopCarRadio(false);
+if($('radioPlayBtn')) $('radioPlayBtn').onclick = () => {
+  if($('radioCodeIn')) playRadioByCode($('radioCodeIn').value, false);
+};
+if($('radioCodeIn')) $('radioCodeIn').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    playRadioByCode($('radioCodeIn').value, false);
+  }
+});
+document.querySelectorAll('.rQuick').forEach(btn => {
+  btn.onclick = () => {
+    const c = btn.dataset.c || '101';
+    if($('radioCodeIn')) $('radioCodeIn').value = c;
+    playRadioByCode(c, false);
+  };
+});
 window.addEventListener('keydown', e => {
-  if(e.key.toLowerCase() === 'r' && (C.driving || passengerOf)) cycleCarRadio();
+  if(e.key.toLowerCase() === 'r' && (C.driving || passengerOf) && document.activeElement !== $('radioCodeIn') && document.activeElement !== $('chatIn')){
+    openRadioModal();
+  }
 });
 
 // Arkadaşın arabasına yolcu olarak binme / inme
@@ -7329,7 +7439,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-224955';
+const APP_VERSION = '2026-10-23-225530';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
