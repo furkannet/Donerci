@@ -189,6 +189,7 @@ button small{font-size:9px;margin-top:0}
   <button id="charBtn" title="Karakter">🧑<span class="t"> Karakter</span></button>
   <button id="frBtn" title="Arkadaşlar">👥<span class="t"> Arkadaşlar</span></button>
   <button id="chatBtn" title="Sohbet">💬<span class="t"> Sohbet</span></button>
+  <button id="emoteBtn" title="Dans & Havai Fişek">🎉<span class="t"> Dans/Fişek</span></button>
   <button id="leadBtn" title="Liderlik Tablosu">🏆<span class="t"> Liderlik</span></button>
   <button id="nightBtn" title="Gece">🌙<span class="t"> Gece</span></button>
   <button id="codeBtn" title="Kod">🎟<span class="t"> Kod</span></button>
@@ -221,7 +222,10 @@ button small{font-size:9px;margin-top:0}
 <button id="pay" style="display:none">💵 Maaş Öde</button>
 <button id="carBtn" style="display:none">🚗 Bin (E)</button>
 <button id="carExit" style="display:none">🚪 İn (E)</button>
+<button id="passBtn" style="display:none;background:#1e3a52;border-color:#7dd3fc;font-weight:700">💺 Yolcu Bin</button>
 <button id="hazardBtn" style="display:none;background:#7c4a12;border-color:#ffa500;font-weight:700">🚨 4'lüleri Yak</button>
+<button id="radioBtn" style="display:none;background:#3b1d5e;border-color:#c084fc;font-weight:700">📻 Radyo: Kapalı</button>
+<button id="raceBtn" style="display:none;background:#14532d;border-color:#4ade80;font-weight:700">🏁 Yarış (500₺)</button>
 </div>
 <button id="driftBtn" style="display:none;position:fixed;left:150px;bottom:706px;z-index:3;padding:12px 14px;background:#4a3a1e;font-weight:700;font-size:15px">🌀 Drift: Açık</button>
 <button id="hornBtn" style="display:none;position:fixed;left:290px;bottom:706px;z-index:3;padding:12px 14px;background:#5a1e1e;font-weight:700;font-size:15px">📯 Korna (H)</button>
@@ -396,7 +400,7 @@ button small{font-size:9px;margin-top:0}
   <div id="chatLog" style="height:105px;overflow-y:auto;font-size:12px;background:rgba(0,0,0,.35);padding:6px;border-radius:6px;display:flex;flex-direction:column;gap:4px"></div>
   <div style="display:flex;gap:4px;flex-wrap:wrap">
     <button class="cQuick" data-m="Selam! 👋" style="padding:3px 6px;font-size:11px">👋 Selam</button>
-    <button class="cQuick" data-m="Gel yarışalım! 🏎️" style="padding:3px 6px;font-size:11px">🏎️ Yarışalım</button>
+    <button id="chatRaceBtn" style="padding:3px 6px;font-size:11px;background:#14532d;border-color:#4ade80">🏁 Yarış Başlat</button>
     <button class="cQuick" data-m="Teşekkürler! ❤️" style="padding:3px 6px;font-size:11px">❤️ Teşekkür</button>
   </div>
   <div style="display:flex;gap:4px">
@@ -471,9 +475,10 @@ const TYPES = {
   emekli:{label:'Emekli', pat:1.5, pay:0.9, tip:15, acc:'cap'},
   taksici:{label:'Taksici', pat:0.9, pay:1.0, tip:14, acc:'cap'},
   zengin:{label:'Zengin', pat:1.2, pay:2.0, tip:30, acc:'cam'},
-  aile:{label:'Aile', pat:1.3, pay:1.3, tip:12, acc:'cap'}
+  aile:{label:'Aile', pat:1.3, pay:1.3, tip:12, acc:'cap'},
+  vip:{label:'🌟 VIP Ünlü', pat:0.9, pay:2.5, tip:60, acc:'cap'}
 };
-const TYPE_W = [['ogrenci',0.3],['isadami',0.22],['turist',0.18],['emekli',0.15],['taksici',0.15],['zengin',0.08],['aile',0.1]];
+const TYPE_W = [['ogrenci',0.28],['isadami',0.20],['turist',0.16],['emekli',0.13],['taksici',0.13],['zengin',0.08],['aile',0.08],['vip',0.07]];
 const RESTOCK = [
   {name:'Çiğ Köfte (10)', desc:'COMOGENE için', price:60, need:'comogene', apply(){ S.stock.cigkofte += 10; }},
   {name:'Nar Ekşisi (15)', desc:'COMOGENE için', price:30, need:'comogene', apply(){ S.stock.nar += 15; }},
@@ -2008,12 +2013,16 @@ class Cust {
   constructor(type){
     this.type = type;
     this.T = TYPES[type];
-    this.g = pick(HUMANS).clone();
+    this.g = type === 'vip' ? human(0xffd700, 0xb8860b, pick(SKINS), 0x1b1b1b) : pick(HUMANS).clone();
     this.legL = this.g.getObjectByName('legL');
     this.legR = this.g.getObjectByName('legR');
     this.armL = this.g.getObjectByName('armL');
     this.armR = this.g.getObjectByName('armR');
     addAcc(this.g, this.T.acc);
+    if(type === 'vip'){
+      addTo(this.g, new THREE.CylinderGeometry(0.24, 0.2, 0.14, 8), M(0xffd700), 0, 2.22, 0);
+      if(typeof makeNameSprite === 'function') this.g.add(makeNameSprite('🌟 VIP ÜNLÜ'));
+    }
     // aile: yanında bir çocuk da gelir (ebeveynin yanında yürür)
     this.child = null;
     if(type === 'aile'){
@@ -2521,7 +2530,7 @@ function comoUpdate(dt){
 }
 
 function updatePlayer(dt){
-  if(shopOpen || over || tutOpen || shiftEnded || kick || setOpen) return;
+  if(shopOpen || over || tutOpen || shiftEnded || kick || setOpen || passengerOf) return;
   if(CM.driving){ comoUpdate(dt); return; }
   if(D.driving){ driveUpdate(dt); return; }
   if(C.driving){ carUpdate(dt); return; }
@@ -2755,6 +2764,22 @@ function handleSpecialCoopEvent(msg){
         }
       }
     }
+  } else if(msg.type === 'emote'){
+    if(myName && msg.user && msg.user.toLowerCase() === myName.toLowerCase()) return;
+    processedCoopEvents.add(msg.id);
+    const k = String(msg.user || '').toLowerCase();
+    const peer = roomPeers[k];
+    if(peer){
+      peer.emoteT = 3.5;
+      if(typeof spawnFirework === 'function') spawnFirework(peer.x, peer.z);
+      flash(`🎉 ${msg.user} dans edip havai fişek patlattı!`, '#ffd54a');
+    }
+  } else if(msg.type === 'race_start'){
+    processedCoopEvents.add(msg.id);
+    if(typeof beginCoopRace === 'function') beginCoopRace(msg.user || 'Oyuncu');
+  } else if(msg.type === 'race_win'){
+    processedCoopEvents.add(msg.id);
+    if(typeof finishCoopRace === 'function') finishCoopRace(msg.user || 'Oyuncu', false);
   }
 }
 const knownPlayers = {}; // sunucudan / ağdan bilinen tüm gerçek oyuncular
@@ -3117,7 +3142,7 @@ function broadcastCoopPos(force){
 function handleIncomingCoopMsg(msg){
   if(!msg || !msg.user) return;
   if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
-  if(msg.type === 'chat' || msg.type === 'money_send' || msg.type === 'shoot'){
+  if(msg.type === 'chat' || msg.type === 'money_send' || msg.type === 'shoot' || msg.type === 'emote' || msg.type === 'race_start' || msg.type === 'race_win'){
     handleSpecialCoopEvent(msg);
     return;
   }
@@ -3245,7 +3270,7 @@ async function pollOnlineStatus(forceFull){
             const msg = JSON.parse(outer.message);
             if(!msg) return;
             if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
-            if(msg.type === 'chat' || msg.type === 'money_send'){ handleSpecialCoopEvent(msg); return; }
+            if(msg.type === 'chat' || msg.type === 'money_send' || msg.type === 'emote' || msg.type === 'race_start' || msg.type === 'race_win'){ handleSpecialCoopEvent(msg); return; }
             if(msg.user){
               const serverMs = outer.time ? outer.time * 1000 : 0;
               msg._ord = serverMs;
@@ -3451,6 +3476,15 @@ function updateFriendCompanion(dt){
     }
     fc.g.position.set(fc.x, 0, fc.z);
     fc.g.rotation.y = fc.yaw;
+    if(fc.emoteT > 0){
+      fc.emoteT -= dt;
+      const et = fc.emoteT * 11;
+      fc.g.position.y = Math.abs(Math.sin(et)) * 0.35;
+      if(fc.armL) fc.armL.rotation.x = -2.5 + Math.sin(et * 1.4) * 0.55;
+      if(fc.armR) fc.armR.rotation.x = -2.5 - Math.sin(et * 1.4) * 0.55;
+      legPose(fc.legL, Math.sin(et) * 0.45);
+      legPose(fc.legR, -Math.sin(et) * 0.45);
+    }
     // Diğer oyuncunun arabası ve elindeki silah: diğer ekranda canlı görünsün
     const on = onlineFriends[k];
     const peerAcct = (on && on.state) || (knownPlayers[k] && knownPlayers[k].state) || getOrCreateFriendAcct(fc.name);
@@ -3839,6 +3873,201 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
   toggleHazardLights();
 });
+/* ================= Yolcu Koltuğu, Radyo, Dans/Havai Fişek ve Araba Yarışı ================= */
+let passengerOf = null; // bindiğimiz arkadaşın küçük harf adı
+let myEmoteT = 0;       // dans ve el sallama süresi
+const FW_COLORS = [0xff4d4d, 0xffd700, 0x4ade80, 0x38bdf8, 0xc084fc, 0xff8a4c];
+function spawnFirework(wx, wz){
+  const fx = typeof wx === 'number' ? wx : P.x;
+  const fz = typeof wz === 'number' ? wz : P.z;
+  try{
+    const ac = audioCtx(), t = ac.currentTime;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(280, t);
+    o.frequency.exponentialRampToValueAtTime(920, t + 0.18);
+    g.gain.setValueAtTime(0.06, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t); o.stop(t + 0.22);
+  }catch(e){}
+  const baseY = 4.6 + Math.random() * 2.2;
+  for(let i = 0; i < 18; i++){
+    const col = FW_COLORS[i % FW_COLORS.length];
+    const m = new THREE.Mesh(GEO.bit, M(col));
+    m.position.set(fx, baseY, fz);
+    scene.add(m);
+    const a = (i / 18) * TAU + (Math.random() - 0.5) * 0.25;
+    const sp = 3.5 + Math.random() * 4.5;
+    parts.push({
+      m,
+      v: new THREE.Vector3(Math.cos(a) * sp, 2.5 + Math.random() * 4.5, Math.sin(a) * sp),
+      life: 1.1 + Math.random() * 0.4
+    });
+  }
+}
+function triggerDanceAndFirework(){
+  myEmoteT = 3.5;
+  thirdPerson = true; // dans ederken kendimizi dıştan görelim
+  const wp = getMyWorldPos();
+  spawnFirework(wp.x, wp.z);
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
+  const id = 'em_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  processedCoopEvents.add(id);
+  const pkt = {type: 'emote', id, user: myName, ts: Date.now()};
+  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+  postToRelays(pkt, true);
+  flash('🎉 Dans ediyorsun ve havai fişek patlattın!', '#ffd54a');
+}
+if($('emoteBtn')) $('emoteBtn').onclick = triggerDanceAndFirework;
+
+// Araba Radyosu (WebAudio sentezleyici: 3 kanal)
+const RADIO_CHANNELS = [
+  {name: 'Kapalı', notes: []},
+  {name: 'Phonk Bass', tempo: 170, type: 'sawtooth', notes: [110, 110, 130.8, 110, 146.8, 130.8, 98, 110]},
+  {name: 'Retro Synth', tempo: 150, type: 'square', notes: [261.6, 329.6, 392.0, 523.2, 392.0, 329.6, 293.7, 349.2]},
+  {name: 'Oyun Havası', tempo: 135, type: 'triangle', notes: [440, 493.9, 554.4, 587.3, 659.3, 587.3, 554.4, 493.9]}
+];
+let radioChanIdx = 0, radioStep = 0, radioTimer = null;
+function stopCarRadio(){
+  radioChanIdx = 0;
+  if(radioTimer){ clearInterval(radioTimer); radioTimer = null; }
+  if($('radioBtn')) $('radioBtn').textContent = '📻 Radyo: Kapalı';
+}
+function playRadioStep(){
+  if((!C.driving && !passengerOf) || escPaused || radioChanIdx === 0) return;
+  const ch = RADIO_CHANNELS[radioChanIdx];
+  if(!ch || !ch.notes.length) return;
+  const freq = ch.notes[radioStep % ch.notes.length];
+  radioStep++;
+  try{
+    const ac = audioCtx(), t = ac.currentTime;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = ch.type || 'sawtooth';
+    o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.032, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t); o.stop(t + 0.14);
+  }catch(e){}
+}
+function cycleCarRadio(){
+  if(!C.driving && !passengerOf) return;
+  radioChanIdx = (radioChanIdx + 1) % RADIO_CHANNELS.length;
+  radioStep = 0;
+  if(radioTimer){ clearInterval(radioTimer); radioTimer = null; }
+  const ch = RADIO_CHANNELS[radioChanIdx];
+  if($('radioBtn')) $('radioBtn').textContent = `📻 Radyo: ${ch.name}`;
+  if(radioChanIdx > 0){
+    radioTimer = setInterval(playRadioStep, ch.tempo || 160);
+    playRadioStep();
+    flash(`📻 Radyo Kanalı: ${ch.name}`, '#c084fc');
+  } else {
+    flash('📻 Radyo kapatıldı', '#9ca3af');
+  }
+}
+if($('radioBtn')) $('radioBtn').onclick = cycleCarRadio;
+window.addEventListener('keydown', e => {
+  if(e.key.toLowerCase() === 'r' && (C.driving || passengerOf)) cycleCarRadio();
+});
+
+// Arkadaşın arabasına yolcu olarak binme / inme
+function findNearbyPeerCar(){
+  for(const k of Object.keys(roomPeers)){
+    const fc = roomPeers[k];
+    if(fc && fc.carMesh && Math.hypot(P.x - fc.cx, P.z - fc.cz) < 4.8) return k;
+  }
+  return null;
+}
+function togglePassengerSeat(){
+  if(passengerOf){
+    const fc = roomPeers[passengerOf];
+    if(fc){ P.x = fc.cx + 2.2; P.z = fc.cz; }
+    passengerOf = null;
+    stopCarRadio();
+    broadcastCoopPos(true);
+    flash('🚪 Arkadaşının arabasından indin', '#7dd3fc');
+    return;
+  }
+  const nearKey = findNearbyPeerCar();
+  if(!nearKey) return;
+  passengerOf = nearKey;
+  const fc = roomPeers[nearKey];
+  flash(`💺 ${fc ? fc.name : 'Arkadaşının'} arabasına yolcu olarak bindin!`, '#4ade80');
+  broadcastCoopPos(true);
+}
+if($('passBtn')) $('passBtn').onclick = togglePassengerSeat;
+
+// Arkadaşla Araba Yarışı (3-2-1 Geri Sayım ve Bitiş Çizgisi, 500₺ Ödül)
+const RACE_FINISH_Z = -82;
+let raceState = {active: false, go: false, startAt: 0};
+const raceArch = new THREE.Group();
+const archL = new THREE.Mesh(B(0.35, 4.2, 0.35), M(0xf1c40f)); archL.position.set(-4.0, 2.1, 0); raceArch.add(archL);
+const archR = new THREE.Mesh(B(0.35, 4.2, 0.35), M(0xf1c40f)); archR.position.set(4.0, 2.1, 0); raceArch.add(archR);
+const archBannerTex = tex(256, 64, (g, w, h) => {
+  for(let y = 0; y < 2; y++) for(let x = 0; x < 8; x++){
+    g.fillStyle = (x + y) % 2 === 0 ? '#111111' : '#ffffff';
+    g.fillRect(x * 32, y * 32, 32, 32);
+  }
+  g.fillStyle = '#ffd700'; g.font = 'bold 30px sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('🏁 BİTİŞ 500₺ 🏁', w / 2, h / 2);
+});
+const archTop = new THREE.Mesh(B(8.4, 0.9, 0.25), new THREE.MeshBasicMaterial({map: archBannerTex}));
+archTop.position.set(0, 4.0, 0);
+raceArch.add(archTop);
+raceArch.position.set(0, 0, RACE_FINISH_Z);
+raceArch.visible = false;
+scene.add(raceArch);
+
+function beginCoopRace(starterName){
+  if(raceState.active) return;
+  raceState.active = true;
+  raceState.go = false;
+  raceArch.visible = true;
+  flash(`🏁 ${starterName} YARIŞ BAŞLATTI! Tünel önündeki BİTİŞ'e ilk varan 500₺ kazanır! (3...)`, '#ffd54a');
+  beep(520, 0.15);
+  setTimeout(() => { if(raceState.active){ flash('🏁 YARIŞ: 2...', '#ffd54a'); beep(520, 0.15); } }, 1000);
+  setTimeout(() => { if(raceState.active){ flash('🏁 YARIŞ: 1...', '#ffd54a'); beep(520, 0.15); } }, 2000);
+  setTimeout(() => {
+    if(raceState.active){
+      raceState.go = true;
+      flash('🟢 BAŞLA! Tünelin önündeki BİTİŞ kemerine sür!', '#4ade80');
+      beep(880, 0.3);
+    }
+  }, 3000);
+}
+function finishCoopRace(winnerName, wonByMe){
+  if(!raceState.active) return;
+  raceState.active = false;
+  raceState.go = false;
+  raceArch.visible = false;
+  if(wonByMe){
+    S.money = (S.money || 0) + 500;
+    save();
+    renderAll();
+    spawnFirework(C.driving ? C.x : P.x, C.driving ? C.z : P.z);
+    beep(980, 0.25);
+    flash('🏆 YARIŞI SEN KAZANDIN! +500₺ Ödül!', '#4ade80');
+    appendChatLog('Yarış', '🏆 Yarışı kazandın ve +500₺ ödül aldın!', true);
+  } else {
+    beep(440, 0.2);
+    flash(`🏁 Yarışı ${winnerName} kazandı! (+500₺)`, '#ffd54a');
+    appendChatLog('Yarış', `🏁 Yarışı ${winnerName} kazandı!`, false);
+  }
+}
+function startCoopRaceRequest(){
+  if(raceState.active){ flash('Yarış zaten devam ediyor!', '#ffd54a'); return; }
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
+  const id = 'rc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  processedCoopEvents.add(id);
+  const pkt = {type: 'race_start', id, user: myName, ts: Date.now()};
+  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+  postToRelays(pkt, true);
+  beginCoopRace(myName);
+}
+if($('raceBtn')) $('raceBtn').onclick = startCoopRaceRequest;
+if($('chatRaceBtn')) $('chatRaceBtn').onclick = startCoopRaceRequest;
 /* ================= Karakter tasarımı ================= */
 const LOOK_OPTS = {
   shirt: {name:'Gömlek', colors:['#3a6ea5', '#c0392b', '#27ae60', '#f1c40f', '#8e44ad', '#ecf0f1']},
@@ -4153,7 +4382,8 @@ function serve(auto = false){
     const pat = Math.max(0, c.patience / c.maxPat);
     const base = c.order.reduce((a, id) => a + PRICE[id], 0);
     const tip = Math.round((pat * 25 + q * 20 + c.T.tip) * (1 + 0.15 * S.up.kasa) * (hotLeft > 0 ? 2 : 1) * (S.kar.led ? 1.1 : 1) * (S.mk.kahve ? 1.05 : 1));
-    const total = Math.round((Math.round(base * c.T.pay) + tip) * 1.15); // döner ve COMOGENE satışları %15 fazla
+    const vipBonus = c.type === 'vip' ? 250 : 0;
+    const total = Math.round((Math.round(base * c.T.pay) + tip) * 1.15) + vipBonus; // döner ve COMOGENE satışları %15 fazla + VIP ödülü
     S.money += total; shiftEarned += total;
     S.xp = (S.xp || 0) + total; checkLevelUp();
     if(auto && S.money >= 5){
@@ -4161,7 +4391,12 @@ function serve(auto = false){
       S.money -= 5;
       flash('Çalışan 5₺ vergi aldı', '#ffd54a');
     }
-    flash(`+${total}₺`, '#4ade80');
+    if(c.type === 'vip'){
+      flash(`🌟 VIP ÜNLÜ MEMNUN KALDI! +${total}₺ (250₺ VIP Ödülü!)`, '#ffd700');
+      if(typeof spawnFirework === 'function') spawnFirework(c.x, c.z);
+    } else {
+      flash(`+${total}₺`, '#4ade80');
+    }
     beep(880, 0.12);
     c.leave(true);
   } else {
@@ -5350,6 +5585,7 @@ function renderGallery(){
 }
 $('carBtn').onclick = () => {
   if(!active() || !S.car) return;
+  passengerOf = null;
   C.driving = true; C.v = 0;
   startEngine();
   broadcastCoopPos(true);
@@ -5360,6 +5596,7 @@ $('carExit').onclick = () => {
   if(!C.driving || Math.abs(C.v) > 1) { flash('Önce yavaşla', '#f87171'); return; }
   C.driving = false; C.v = 0;
   stopEngine();
+  stopCarRadio();
   P.x = C.x + 2.2; P.z = C.z;
   P.yaw = -Math.PI / 2;
   broadcastCoopPos(true);
@@ -5428,7 +5665,10 @@ const LINES = {
   isadami: ['Vaktim dar, hızlı lütfen.', 'Yanında ayran olsun.', 'Tam mesai, acelem var.'],
   turist: ['Very nice! Döner ne demek?', 'Fotoğraf çekebilir miyim?', 'Yanına kola da alırım.'],
   emekli: ['Benim zamanımda döner daha ucuzdu.', 'Soğanı az koy evladım.', 'Yavaş yavaş gelirim, merak etme.'],
-  taksici: ['Yolda kısa bir mola verdim.', 'Ayran şart!', 'Sıcak saatte iş hep çok olur.']
+  taksici: ['Yolda kısa bir mola verdim.', 'Ayran şart!', 'Sıcak saatte iş hep çok olur.'],
+  zengin: ['En iyisinden hazırla, bahşişi bol!', 'Kalite her şeydir.'],
+  aile: ['Çocuğum da çok acıktı.', 'Hep birlikte döner yemeye geldik.'],
+  vip: ['Sosyal medyada paylaşacağım, harika olsun!', '🌟 VIP siparişime özel bahşiş vereceğim!']
 };
 let bubbleT = 0, bubbleCust = null;
 function payMehmut(){
@@ -5975,7 +6215,15 @@ function frame(now){
     const fx = -Math.sin(D.h), fz = -Math.cos(D.h);
     camera.position.set(D.x + fx * 2.8 * TS, 1.7, D.z + fz * 2.8 * TS);
     camera.rotation.set(P.pitch, D.h + P.yaw + Math.PI / 2, 0);
+  } else if(passengerOf && roomPeers[passengerOf] && roomPeers[passengerOf].carMesh){
+    const fc = roomPeers[passengerOf];
+    P.x = fc.cx + Math.cos(fc.ch) * 0.45;
+    P.z = fc.cz - Math.sin(fc.ch) * 0.45;
+    playerMesh.visible = false;
+    camera.position.set(fc.cx - Math.sin(fc.ch) * 3.8, 2.2, fc.cz - Math.cos(fc.ch) * 3.8);
+    camera.rotation.set(P.pitch - 0.15, fc.ch + Math.PI + (P.yaw + Math.PI / 2), 0);
   } else {
+    if(passengerOf) passengerOf = null;
     if(thirdPerson){
       // dış görüş: karakterin arkasından
       camera.position.set(P.x + Math.sin(P.yaw) * 3, 2.4, P.z + Math.cos(P.yaw) * 3);
@@ -5991,10 +6239,19 @@ function frame(now){
     const pSpeed = Math.hypot(P.x - pLastX, P.z - pLastZ) / Math.max(dt, 0.001);
     pLastX = P.x; pLastZ = P.z;
     const pMoving = pSpeed > 0.3;
-    if(pMoving) pPh += dt * 7;
+    if(pMoving){ pPh += dt * 7; myEmoteT = 0; }
     const pSw = pMoving ? Math.sin(pPh) * 0.6 : 0;
     legPose(pLegL, pSw); legPose(pLegR, -pSw);
     pArmL.rotation.x = -pSw * 0.7; pArmR.rotation.x = pSw * 0.7;
+    if(myEmoteT > 0){
+      myEmoteT -= dt;
+      const et = myEmoteT * 11;
+      playerMesh.position.y = Math.abs(Math.sin(et)) * 0.35;
+      pArmL.rotation.x = -2.5 + Math.sin(et * 1.4) * 0.55;
+      pArmR.rotation.x = -2.5 - Math.sin(et * 1.4) * 0.55;
+      legPose(pLegL, Math.sin(et) * 0.45);
+      legPose(pLegR, -Math.sin(et) * 0.45);
+    }
     if(kick){
       // fırlarken yükselir ve döner
       const rr = Math.min(1, kick.t / 0.7);
@@ -6021,8 +6278,27 @@ function frame(now){
     cl.style.top = ((-v.y + 1) / 2 * window.innerHeight) + 'px';
   } else cl.style.display = 'none';
   disp('carExit', C.driving && Math.abs(C.v) < 1 ? 'block' : 'none');
+  const nearPeerCarKey = (!C.driving && !D.driving && !CM.driving) ? findNearbyPeerCar() : null;
+  disp('passBtn', (passengerOf || nearPeerCarKey) ? 'block' : 'none');
+  if(passengerOf || nearPeerCarKey){
+    txt('passBtn', passengerOf ? '🚪 Yolcu İn' : '💺 Yolcu Bin');
+  }
   disp('hazardBtn', C.driving ? 'block' : 'none');
   txt('hazardBtn', C.hazard ? "🚨 4'lüler: Açık" : "🚨 4'lüleri Yak");
+  disp('radioBtn', (C.driving || passengerOf) ? 'block' : 'none');
+  disp('raceBtn', (C.driving && Object.keys(roomPeers).length > 0 && !raceState.active) ? 'block' : 'none');
+  if(raceState.active && raceState.go){
+    const myZ = C.driving ? C.z : P.z;
+    if(myZ <= RACE_FINISH_Z){
+      const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
+      const id = 'rw_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+      processedCoopEvents.add(id);
+      const pkt = {type: 'race_win', id, user: myName, ts: Date.now()};
+      if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+      postToRelays(pkt, true);
+      finishCoopRace(myName, true);
+    }
+  }
   disp('driftBtn', C.driving ? 'block' : 'none');
   // farlar sürerken yanar; stop lambaları fren yapınca parlar
   if(C.beam) C.beam.intensity = (C.driving && C.beamOn) ? 4 : 0;
@@ -7053,7 +7329,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-222424';
+const APP_VERSION = '2026-10-23-224955';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
