@@ -2599,6 +2599,10 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs, extra){
     cz: (isNewerPos && typeof ex.cz === 'number') ? ex.cz : ((prev && typeof prev.cz === 'number') ? prev.cz : -24),
     ch: (isNewerPos && typeof ex.ch === 'number') ? ex.ch : ((prev && typeof prev.ch === 'number') ? prev.ch : 0),
     cslip: (isNewerPos && typeof ex.cslip === 'number') ? ex.cslip : ((prev && typeof prev.cslip === 'number') ? prev.cslip : 0),
+    csteer: (isNewerPos && typeof ex.csteer === 'number') ? ex.csteer : ((prev && typeof prev.csteer === 'number') ? prev.csteer : 0),
+    chaz: (isNewerPos && typeof ex.chaz === 'boolean') ? ex.chaz : !!(prev && prev.chaz),
+    cbrk: (isNewerPos && typeof ex.cbrk === 'boolean') ? ex.cbrk : !!(prev && prev.cbrk),
+    cbm: (isNewerPos && typeof ex.cbm === 'boolean') ? ex.cbm : !!(prev && prev.cbm),
     mods: (isNewerPos && ex.mods) ? ex.mods : ((st && st.mods) || (prev && prev.mods) || {}),
     plate: (isNewerPos && ex.plate) ? ex.plate : ((st && st.plate) || (prev && prev.plate) || '06 ABC 123'),
     msgTs: (isNewerPos && incomingTs) ? incomingTs : ((prev && prev.msgTs) || 0),
@@ -2699,6 +2703,35 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
     const pl = makeCarPlate(plateStr || '06 ABC 123');
     mesh.children.forEach(ch => { if(ch.material === PLATE_M) ch.material = pl; });
   }
+  // Farlar, stop lambaları, yerdeki far lekesi ve sağ/sol dönüş sinyalleri
+  const heads = [], tails = [], sigL = [], sigR = [];
+  const headOn = new THREE.MeshBasicMaterial({color: mods.far ? 0x9fe8ff : 0xfff6c8});
+  const headOff = new THREE.MeshBasicMaterial({color: 0x444444});
+  const tailOn = new THREE.MeshBasicMaterial({color: 0xff2a2a});
+  const tailOff = new THREE.MeshBasicMaterial({color: 0x5a1a1a});
+  mesh.children.forEach(ch => {
+    if(ch.geometry !== GEO.light) return;
+    if(ch.position.z < 0){ heads.push(ch); ch.material = headOff; }
+    else { tails.push(ch); ch.material = tailOff; }
+  });
+  const sigMat = new THREE.MeshBasicMaterial({color: 0xffa500});
+  [[-0.85, -2.12], [-0.85, 2.12]].forEach(([x, z]) => {
+    const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
+    m.position.set(x, 0.85, z); m.visible = false;
+    mesh.add(m); sigL.push(m);
+  });
+  [[0.85, -2.12], [0.85, 2.12]].forEach(([x, z]) => {
+    const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
+    m.position.set(x, 0.85, z); m.visible = false;
+    mesh.add(m); sigR.push(m);
+  });
+  const beamSpot = new THREE.Mesh(new THREE.CircleGeometry(4.5, 16),
+    new THREE.MeshBasicMaterial({color: 0xfff0a0, transparent: true, opacity: 0.35, depthWrite: false}));
+  beamSpot.rotation.x = -Math.PI / 2;
+  beamSpot.position.set(0, 0.05, -7.0);
+  beamSpot.visible = false;
+  mesh.add(beamSpot);
+  mesh.userData.lights = {heads, tails, sigL, sigR, headOn, headOff, tailOn, tailOff, beamSpot};
   if(mods.spoiler){
     const sp = new THREE.Mesh(B(1.8, 0.08, 0.3), M(0x111111));
     sp.position.set(0, 1.25, 2.0);
@@ -2823,7 +2856,7 @@ function returnToMyAccount(){
 }
 let lastCoopBroadcast = 0;
 let lastPingSent = 0;
-let lastBroadX = 0, lastBroadZ = 0, lastBroadYaw = 0;
+let lastBroadX = 0, lastBroadZ = 0, lastBroadYaw = 0, lastBroadSigKey = '';
 function getMyWorldPos(){
   if(C.driving) return {x: C.x, z: C.z, yaw: C.h + Math.PI, driving: true, carId: S.car, carPaint: S.mods && S.mods.paint};
   if(D.driving) return {x: D.x, z: D.z, yaw: D.h + Math.PI, driving: false};
@@ -2837,7 +2870,7 @@ function requestOnlinePing(){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(!myName) return;
   const wp = getMyWorldPos();
-  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, car: S.car, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
+  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, car: S.car, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), csteer: Number((C.steer || 0).toFixed(2)), chaz: !!C.hazard, cbrk: !!C.braking, cbm: !!C.beamOn, mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   postToRelays(pkt, true);
 }
@@ -2845,7 +2878,13 @@ function broadcastCoopPos(force){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user);
   if(!myName) return;
   const wp = getMyWorldPos();
-  const moved = Math.hypot(wp.x - lastBroadX, wp.z - lastBroadZ) > 0.02 || Math.abs(wp.yaw - lastBroadYaw) > 0.05;
+  const csteerVal = Number((C.steer || 0).toFixed(2));
+  const chazVal = !!C.hazard;
+  const cbrkVal = !!C.braking;
+  const cbmVal = !!C.beamOn;
+  const sigKey = `${csteerVal > 0.3 ? 1 : (csteerVal < -0.3 ? -1 : 0)}|${chazVal}|${cbrkVal}|${cbmVal}`;
+  const sigChanged = sigKey !== lastBroadSigKey;
+  const moved = Math.hypot(wp.x - lastBroadX, wp.z - lastBroadZ) > 0.02 || Math.abs(wp.yaw - lastBroadYaw) > 0.05 || sigChanged;
   const currentRoom = activeFriendAcct || myName;
   const now = Date.now();
   const stVal = Number(shiftT.toFixed(1));
@@ -2857,14 +2896,14 @@ function broadcastCoopPos(force){
   const cslipVal = Number((C.slip || 0).toFixed(2));
   // Yürürken ve araba sürerken anında (~80ms) WebSocket üzerinden gönder ki karşıda hiç beklemeden görünsün
   const pkt = force
-    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
-    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, ts: now};
+    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
+    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const minInterval = moved ? 80 : 2500;
-  if(!force && now - lastCoopBroadcast < minInterval) return;
+  if(!force && !sigChanged && now - lastCoopBroadcast < minInterval) return;
   lastCoopBroadcast = now;
-  lastBroadX = wp.x; lastBroadZ = wp.z; lastBroadYaw = wp.yaw;
-  postToRelays(pkt, !!force);
+  lastBroadX = wp.x; lastBroadZ = wp.z; lastBroadYaw = wp.yaw; lastBroadSigKey = sigKey;
+  postToRelays(pkt, !!(force || sigChanged));
 }
 function handleIncomingCoopMsg(msg){
   if(!msg || !msg.user) return;
@@ -3249,6 +3288,21 @@ function updateFriendCompanion(dt){
         fc.cslip = (fc.cslip || 0) + (targetSlip - (fc.cslip || 0)) * Math.min(1, dt * 10);
         fc.carMesh.position.set(fc.cx, 0, fc.cz);
         fc.carMesh.rotation.y = fc.ch + Math.PI + (fc.cslip || 0);
+        const lg = fc.carMesh.userData && fc.carMesh.userData.lights;
+        if(lg){
+          const peerBraking = !!(on && on.cbrk);
+          const peerBeam = !!(on && on.cbm);
+          const peerHazard = !!(on && on.chaz);
+          const peerSteer = (on && typeof on.csteer === 'number') ? on.csteer : 0;
+          lg.heads.forEach(m => { m.material = isDrivingCar ? lg.headOn : lg.headOff; });
+          lg.tails.forEach(m => { m.material = (isDrivingCar && peerBraking) ? lg.tailOn : lg.tailOff; });
+          if(lg.beamSpot) lg.beamSpot.visible = isDrivingCar && peerBeam;
+          const blinkOn = Math.floor(performance.now() / 400) % 2 === 0;
+          const rOn = isDrivingCar && (peerHazard || peerSteer > 0.3) && blinkOn;
+          const lOn = isDrivingCar && (peerHazard || peerSteer < -0.3) && blinkOn;
+          lg.sigR.forEach(m => m.visible = rOn);
+          lg.sigL.forEach(m => m.visible = lOn);
+        }
       }
     } else if(fc.carMesh){
       scene.remove(fc.carMesh);
@@ -3464,6 +3518,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keydown', e => {
   if(e.key.toLowerCase() !== 'l' || !C.driving) return;
   C.beamOn = !C.beamOn;
+  broadcastCoopPos(true);
   flash(C.beamOn ? 'Far ışığı açık' : 'Far ışığı kapalı', '#fff0c0');
 });
 // Boşluk: arabanın dört sinyali (tehlike ışığı) açılıp kapanır
@@ -3471,6 +3526,7 @@ window.addEventListener('keydown', e => {
   if(e.key !== ' ' || !C.driving) return;
   e.preventDefault();
   C.hazard = !C.hazard;
+  broadcastCoopPos(true);
   flash(C.hazard ? 'Tehlike ışıkları açık' : 'Tehlike ışıkları kapalı', '#ffa500');
 });
 /* ================= Karakter tasarımı ================= */
@@ -6552,7 +6608,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-200602';
+const APP_VERSION = '2026-10-23-202904';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
