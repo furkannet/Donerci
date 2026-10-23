@@ -1887,10 +1887,17 @@ const TAXI_M = new THREE.MeshBasicMaterial({color:0xffd000});
 function car(color, type = 'sedan'){
   const g = new THREE.Group();
   const paint = M(color);
-  if(type === 'sport'){
-    // spor araba: alçak ve geniş gövde, küçük kabin
-    addTo(g, B(1.9, 0.5, 4.4), paint, 0, 0.5, 0);
-    addTo(g, B(1.5, 0.4, 1.8), GLASS_M, 0, 0.95, -0.2);
+  const isSport = type === 'sport';
+  if(isSport){
+    // spor araba: alçak ve geniş gövde, şık tavan, ön/arka/yan camlar ve hava girişi
+    addTo(g, B(1.94, 0.48, 4.4), paint, 0, 0.48, 0);
+    addTo(g, B(1.52, 0.36, 1.85), TRIM_M, 0, 0.88, -0.1);
+    addTo(g, B(1.44, 0.04, 1.65), paint, 0, 1.07, -0.1); // tavan rengi
+    addTo(g, B(1.44, 0.32, 0.04), GLASS_M, 0, 0.88, -1.03); // ön cam
+    addTo(g, B(1.44, 0.30, 0.04), GLASS_M, 0, 0.88, 0.83);  // arka cam
+    addTo(g, B(0.04, 0.28, 1.55), GLASS_M, 0.76, 0.90, -0.1); // sağ cam
+    addTo(g, B(0.04, 0.28, 1.55), GLASS_M, -0.76, 0.90, -0.1); // sol cam
+    addTo(g, B(1.2, 0.03, 0.45), TRIM_M, 0, 0.73, -1.45); // ön kaput hava ızgarası
   } else if(type === 'van'){
     addTo(g, GEO.vanBody, paint, 0, 0.95, 0);
     addTo(g, GEO.vanWin, GLASS_M, 1.0, 1.4, -0.2);
@@ -1901,24 +1908,30 @@ function car(color, type = 'sedan'){
     addTo(g, GEO.cabin, TRIM_M, 0, 1.25, -0.2);
     addTo(g, GEO.sideWin, GLASS_M, 0.81, 1.3, -0.2);
     addTo(g, GEO.sideWin, GLASS_M, -0.81, 1.3, -0.2);
-  // ön ve arka cam (kabinin ön ve arka yüzünde)
-  addTo(g, new THREE.BoxGeometry(1.5, 0.5, 0.04), GLASS_M, 0, 1.3, -1.33);
-  addTo(g, new THREE.BoxGeometry(1.5, 0.45, 0.04), GLASS_M, 0, 1.3, 0.92);
+    // ön ve arka cam (kabinin ön ve arka yüzünde)
+    addTo(g, new THREE.BoxGeometry(1.5, 0.5, 0.04), GLASS_M, 0, 1.3, -1.33);
+    addTo(g, new THREE.BoxGeometry(1.5, 0.45, 0.04), GLASS_M, 0, 1.3, 0.92);
     if(type === 'taxi') addTo(g, GEO.taxiSign, TAXI_M, 0, 1.64, -0.2); // çatının üstünde
   }
-  // kapı çizgileri ve kaput
-  addTo(g, GEO.hood, TRIM_M, 0, 0.96, -1.5);
-  addTo(g, GEO.bumper, TRIM_M, 0, 0.3, -2.14);
-  addTo(g, GEO.bumper, TRIM_M, 0, 0.3, 2.14);
-  addTo(g, GEO.light, HEAD_M, -0.6, 0.72, -2.12);
-  addTo(g, GEO.light, HEAD_M, 0.6, 0.72, -2.12);
-  addTo(g, GEO.light, TAIL_M, -0.7, 0.72, 2.12);
-  addTo(g, GEO.light, TAIL_M, 0.7, 0.72, 2.12);
+  // kapı çizgileri, farlar ve tamponlar (spor araba yüksekliğine uyumlu)
+  const hoodY = isSport ? 0.73 : 0.96;
+  const lightY = isSport ? 0.56 : 0.72;
+  const plateY = isSport ? 0.46 : 0.62;
+  const mirY = isSport ? 0.82 : 1.15;
+  const bz = isSport ? 2.21 : 2.14;
+  const lz = isSport ? 2.20 : 2.12;
+  addTo(g, GEO.hood, TRIM_M, 0, hoodY, -1.5);
+  addTo(g, GEO.bumper, TRIM_M, 0, 0.28, -bz);
+  addTo(g, GEO.bumper, TRIM_M, 0, 0.28, bz);
+  addTo(g, GEO.light, HEAD_M, -0.64, lightY, -lz);
+  addTo(g, GEO.light, HEAD_M, 0.64, lightY, -lz);
+  addTo(g, GEO.light, TAIL_M, -0.7, lightY, lz);
+  addTo(g, GEO.light, TAIL_M, 0.7, lightY, lz);
   // plakalar (ön ve arka)
-  addTo(g, GEO.plate, PLATE_M, 0, 0.62, 2.11);
-  addTo(g, GEO.plate, PLATE_M, 0, 0.62, -2.11).rotation.y = Math.PI;
-  addTo(g, GEO.mirror, paint, -1.02, 1.15, -0.9);
-  addTo(g, GEO.mirror, paint, 1.02, 1.15, -0.9);
+  addTo(g, GEO.plate, PLATE_M, 0, plateY, lz - 0.01);
+  addTo(g, GEO.plate, PLATE_M, 0, plateY, -(lz - 0.01)).rotation.y = Math.PI;
+  addTo(g, GEO.mirror, paint, -1.0, mirY, -0.85);
+  addTo(g, GEO.mirror, paint, 1.0, mirY, -0.85);
   // egzoz borusu (arkada, alt tarafta)
   const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.25, 8).rotateX(Math.PI / 2), M(0x9aa0a6));
   exhaust.position.set(0.5, 0.3, 2.15);
@@ -2645,9 +2658,39 @@ function appendChatLog(user, text, isMe){
   while(log.children.length > 30) log.removeChild(log.firstChild);
   log.scrollTop = log.scrollHeight;
 }
+const BAD_WORDS = [
+  'amk','aq','amq','amcik','amcık','aminakoy','amınakoy','amina','amına',
+  'sik','siktir','sikeyim','sikerim','siker','sikik','sikiş','sikis','sokuk',
+  'orospu','orosbu','oc','oç','piç','pic','pezevenk','gavat','kahpe','kaltak',
+  'yarrak','yarak','yarram','göt','got','gotveren','götveren','ibne','puşt','pust',
+  'bok','piçlik','salak','aptal','gerizekalı','gerizekali','mal','dangalak','angut',
+  'hıyar','fuck','shit','bitch','asshole','dick'
+];
+function hasProfanity(str){
+  if(!str) return false;
+  const norm = String(str).toLocaleLowerCase('tr-TR')
+    .replace(/0/g,'o').replace(/1/g,'i').replace(/3/g,'e').replace(/4/g,'a').replace(/\$/g,'s');
+  const words = norm.split(/[^a-zçğıöşü]+/).filter(Boolean);
+  for(const w of words){
+    if(BAD_WORDS.includes(w)) return true;
+    for(const bw of BAD_WORDS){
+      if(bw.length >= 4 && w.includes(bw)) return true;
+    }
+  }
+  const compact = norm.replace(/[^a-zçğıöşü]/g, '');
+  for(const bw of BAD_WORDS){
+    if(bw.length >= 4 && compact.includes(bw)) return true;
+  }
+  return false;
+}
 function sendChatMessage(rawText){
   const text = String(rawText || '').trim().slice(0, 60);
   if(!text) return;
+  if(hasProfanity(text)){
+    beep(180, 0.2, 'sawtooth');
+    flash('🚫 Küfür ve argo kelimeler yasaktır!', '#f87171');
+    return;
+  }
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
   const id = 'ch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   processedCoopEvents.add(id);
@@ -2671,6 +2714,7 @@ function handleSpecialCoopEvent(msg){
   if(msg.type === 'chat' && msg.text){
     if(myName && msg.user && msg.user.toLowerCase() === myName.toLowerCase()) return;
     processedCoopEvents.add(msg.id);
+    if(hasProfanity(msg.text) || hasProfanity(msg.user)) return;
     appendChatLog(msg.user, msg.text, false);
     const k = String(msg.user || '').toLowerCase();
     if(roomPeers[k]) showPeerChatBubble(roomPeers[k], msg.text);
@@ -2816,12 +2860,18 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
   const def = CARS.find(c => c.id === carId);
   if(!def) return null;
   const mods = modsObj || {};
+  const isSport = def.type === 'sport';
+  const stripeY = isSport ? 0.73 : 0.96;
+  const sigY = isSport ? 0.62 : 0.85;
+  const sigZ = isSport ? 2.20 : 2.12;
+  const spTopY = isSport ? 0.96 : 1.25;
+  const spLegY = isSport ? 0.82 : 1.1;
   const mesh = car(mods.paint || def.color, def.type);
   if(mods.sprey){
     const stripeMat = M(0x111111);
     [-0.35, 0.35].forEach(x => {
       const s = new THREE.Mesh(B(0.2, 0.02, 4.2), stripeMat);
-      s.position.set(x, 0.96, 0);
+      s.position.set(x, stripeY, 0);
       mesh.add(s);
     });
   }
@@ -2849,14 +2899,14 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
     else { tails.push(ch); ch.material = tailOff; }
   });
   const sigMat = new THREE.MeshBasicMaterial({color: 0xffa500});
-  [[-0.85, -2.12], [-0.85, 2.12]].forEach(([x, z]) => {
+  [[-0.85, -sigZ], [-0.85, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
-    m.position.set(x, 0.85, z); m.visible = false;
+    m.position.set(x, sigY, z); m.visible = false;
     mesh.add(m); sigL.push(m);
   });
-  [[0.85, -2.12], [0.85, 2.12]].forEach(([x, z]) => {
+  [[0.85, -sigZ], [0.85, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
-    m.position.set(x, 0.85, z); m.visible = false;
+    m.position.set(x, sigY, z); m.visible = false;
     mesh.add(m); sigR.push(m);
   });
   const beamSpot = new THREE.Mesh(new THREE.CircleGeometry(4.5, 16),
@@ -2868,11 +2918,11 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
   mesh.userData.lights = {heads, tails, sigL, sigR, headOn, headOff, tailOn, tailOff, beamSpot};
   if(mods.spoiler){
     const sp = new THREE.Mesh(B(1.8, 0.08, 0.3), M(0x111111));
-    sp.position.set(0, 1.25, 2.0);
+    sp.position.set(0, spTopY, 2.0);
     mesh.add(sp);
     [-0.7, 0.7].forEach(x => {
       const st = new THREE.Mesh(B(0.06, 0.2, 0.06), M(0x111111));
-      st.position.set(x, 1.1, 2.0);
+      st.position.set(x, spLegY, 2.0);
       mesh.add(st);
     });
   }
@@ -4339,6 +4389,7 @@ async function profileAct(isReg){
   const u = $('pUser').value.trim();
   const p = $('pPass').value;
   if(u.length < 2 || p.length < 4){ $('pMsg').textContent = 'Kullanıcı adı en az 2, şifre en az 4 karakter olmalı'; return; }
+  if(hasProfanity(u)){ $('pMsg').textContent = '🚫 Küfür veya argo içeren kullanıcı adı yasaktır!'; return; }
   const h = await sha256Hex(u + ':' + p);
   const cur = getProfile();
   if(isReg){
@@ -4372,11 +4423,16 @@ $('setBtn').onclick = () => {
   $('set').style.display = 'flex';
 };
 $('setOk').onclick = () => {
+  const newName = $('sName').value.trim().slice(0, 16);
+  if(hasProfanity(newName)){
+    flash('🚫 Küfür veya argo içeren isim yasaktır!', '#f87171');
+    return;
+  }
   S.settings.sens = parseFloat($('sSens').value);
   S.settings.invY = $('sInv').checked;
   S.settings.left = $('sLeft').checked;
   S.settings.carSpeed = parseFloat($('sCarSpd').value);
-  S.settings.name = $('sName').value.trim().slice(0, 16);
+  S.settings.name = newName;
   applySettings();
   save();
   setOpen = false;
@@ -4828,13 +4884,19 @@ function spawnOwnedCar(){
   ownedCarMesh = null;
   const def = CARS.find(c => c.id === S.car);
   if(!def) return;
+  const isSport = def.type === 'sport';
+  const stripeY = isSport ? 0.73 : 0.96;
+  const sigY = isSport ? 0.62 : 0.85;
+  const sigZ = isSport ? 2.20 : 2.12;
+  const spTopY = isSport ? 0.96 : 1.25;
+  const spLegY = isSport ? 0.82 : 1.1;
   ownedCarMesh = car(S.mods.paint || def.color, def.type);
   // sprey boya: gövdenin üstüne iki siyah yarış şeridi
   if(S.mods.sprey){
     const stripeMat = M(0x111111);
     [-0.35, 0.35].forEach(x => {
       const s = new THREE.Mesh(B(0.2, 0.02, 4.2), stripeMat);
-      s.position.set(x, 0.96, 0);
+      s.position.set(x, stripeY, 0);
       ownedCarMesh.add(s);
     });
   }
@@ -4875,25 +4937,25 @@ function spawnOwnedCar(){
   // dönüş sinyalleri (turuncu, direksiyon yönüne göre yanıp söner)
   C.sigL = []; C.sigR = [];
   const sigMat = new THREE.MeshBasicMaterial({color: 0xffa500});
-  [[-0.85, -2.12], [-0.85, 2.12]].forEach(([x, z]) => {
+  [[-0.85, -sigZ], [-0.85, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
-    m.position.set(x, 0.85, z); m.visible = false;
+    m.position.set(x, sigY, z); m.visible = false;
     ownedCarMesh.add(m); C.sigL.push(m);
   });
-  [[0.85, -2.12], [0.85, 2.12]].forEach(([x, z]) => {
+  [[0.85, -sigZ], [0.85, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
-    m.position.set(x, 0.85, z); m.visible = false;
+    m.position.set(x, sigY, z); m.visible = false;
     ownedCarMesh.add(m); C.sigR.push(m);
   });
   // modifiyeler: spoiler (arka), neon (alttan mavi ışık)
   if(S.mods.spoiler){
     const sp = new THREE.Mesh(B(1.8, 0.08, 0.3), M(0x111111));
-    sp.position.set(0, 1.25, 2.0);
+    sp.position.set(0, spTopY, 2.0);
     ownedCarMesh.add(sp);
     // spoiler tutacakları (bagajdan iki destek)
     [-0.7, 0.7].forEach(x => {
       const st = new THREE.Mesh(B(0.06, 0.2, 0.06), M(0x111111));
-      st.position.set(x, 1.1, 2.0);
+      st.position.set(x, spLegY, 2.0);
       ownedCarMesh.add(st);
     });
   }
@@ -5151,9 +5213,11 @@ function makeCarPlate(text){
 $('plateSave').onclick = () => {
   const v = $('plateIn').value.trim().toUpperCase().slice(0, 10);
   if(!v){ flash('Plaka boş olamaz', '#f87171'); return; }
+  if(hasProfanity(v)){ flash('🚫 Plakada küfür veya argo yasaktır!', '#f87171'); return; }
   S.plate = v;
   save();
   if(S.car) spawnOwnedCar();
+  broadcastCoopPos(true);
   flash(`Plaka kaydedildi: ${v}`, '#4ade80');
 };
 function openGallery(){
@@ -6822,7 +6886,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-204921';
+const APP_VERSION = '2026-10-23-213546';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
