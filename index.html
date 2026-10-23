@@ -233,6 +233,7 @@ button small{font-size:9px;margin-top:0}
 <button id="radioBtn" style="display:none;background:#3b1d5e;border-color:#c084fc;font-weight:700">📻 Radyo: Kapalı</button>
 <button id="trunkBtn" style="display:none;background:#1e3a52;border-color:#38bdf8;font-weight:700">🔊 Bagaj: Kapalı</button>
 <button id="raceBtn" style="display:none;background:#14532d;border-color:#4ade80;font-weight:700">🏁 Yarış (500₺)</button>
+<button id="kuryeBtn" style="display:none;background:#b45309;border-color:#ffd54a;font-weight:700">🛵 Kurye Teslim</button>
 </div>
 <button id="driftBtn" style="display:none;position:fixed;left:150px;bottom:706px;z-index:3;padding:12px 14px;background:#4a3a1e;font-weight:700;font-size:15px">🌀 Drift: Açık</button>
 <button id="hornBtn" style="display:none;position:fixed;left:290px;bottom:706px;z-index:3;padding:12px 14px;background:#5a1e1e;font-weight:700;font-size:15px">📯 Korna (H)</button>
@@ -534,7 +535,10 @@ const KAR = [
   {id:'tampon', name:'Çelik Tampon', desc:'Vardiyada bir çarpışmada can gitmez', price:350},
   {id:'ocak', name:'Büyük Ocak', desc:'Et kapasitesi 60 → 90', price:400},
   {id:'led', name:'LED Tabela', desc:'Karavan ışığı güçlenir, bahşişler %10 artar', price:250},
-  {id:'staff', name:'Çalışan', desc:'Sıradaki siparişi hazırlar ve servis eder. Vardiya başı 20₺ maaş', price:400}
+  {id:'staff', name:'Çalışan', desc:'Sıradaki siparişi hazırlar ve servis eder. Vardiya başı 20₺ maaş', price:400},
+  {id:'masa', name:'🪑 Masa & Sandalye Takımı', desc:'Dükkanın önüne masalar kurulur, oturan müşteriler +40₺ bahşiş bırakır', price:450},
+  {id:'garson', name:'🤵 Garson (Servis Elemanı)', desc:'Hazırlanan yemekleri masadaki müşterilere götürür (+25₺ ekstra bahşiş)', price:500},
+  {id:'kurye', name:'🛵 Kurye & Telefon Siparişi', desc:'Telefonla paket sipariş gelir, kuryeye teslim edince 2 katı ücret alırsın', price:600}
 ];
 
 const MAX_MEAT = 60, MAX_PLATE = 8, MAX_QUEUE = 6, MAX_LIVES = 3;
@@ -564,9 +568,9 @@ const DEF = {
   stock:{tavuk:20, cigkofte:0, nar:0, salgam:0, misir:0, biber:0, kofteSos:0, lavas:30, pilav:30, sogan:30, marul:30, domates:30, tursu:30, aci:30, yogurt:30, ayran:30, kola:30, patates:30},
   up:{kesici:0, reklam:0, sabir:0, kasa:0},
   unlock:{porsiyon:false, buzdolabi:false, fritoz:false},
-  kar:{motor:false, tampon:false, ocak:false, led:false, staff:false},
+  kar:{motor:false, tampon:false, ocak:false, led:false, staff:false, masa:false, garson:false, kurye:false},
   settings:{sens:1, invY:false, left:false},
-  mk:{kahve:false, hali:false, robot:false, pc:false, toys:false, guard:false, cam:false, klima:false, comogene:false, comoStaff:false},
+  mk:{kahve:false, hali:false, robot:false, pc:false, toys:false, guard:false, cam:false, klima:false, comogene:false, comoStaff:false, masa:false, garson:false, kurye:false},
   wageDue:0,
   fuel:100,
   look:{shirt:'#3a6ea5', pants:'#2a2a2a', skin:'#f1c27d', hair:'#1b1b1b'},
@@ -1831,6 +1835,84 @@ dogMesh.rotation.y = Math.PI; // başı yola (-x yönüne) bakar
 dogMesh.visible = false;
 scene.add(dogMesh);
 
+// Dükkan önü Masa & Sandalye Takımı, Garson (Servis Elemanı) ve Paket Servis Kurye Motoru
+const TABLES_POS = [
+  {x: 6.4, z: -6.8, seatX: 6.4, seatZ: -7.5,ry: 0, occupiedBy: null},
+  {x: 6.4, z: -9.6, seatX: 6.4, seatZ: -10.3, ry: 0, occupiedBy: null}
+];
+const diningTablesGroup = new THREE.Group();
+const TBL_TOP_GEO = new THREE.CylinderGeometry(0.65, 0.65, 0.07, 10);
+const TBL_LEG_GEO = new THREE.CylinderGeometry(0.07, 0.1, 0.78, 8);
+const CHR_SEAT_GEO = B(0.42, 0.06, 0.42);
+const CHR_BACK_GEO = B(0.42, 0.45, 0.06);
+const CHR_LEG_GEO = B(0.32, 0.42, 0.32);
+TABLES_POS.forEach(tb => {
+  const tg = new THREE.Group();
+  tg.position.set(tb.x, 0.3, tb.z);
+  addTo(tg, TBL_LEG_GEO, M(0x374151), 0, 0.39, 0);
+  addTo(tg, TBL_TOP_GEO, M(0xd97706), 0, 0.78, 0);
+  // masa örtüsü detayı
+  addTo(tg, new THREE.CylinderGeometry(0.48, 0.48, 0.02, 10), M(0xfef3c7), 0, 0.82, 0);
+  // 2 sandalye (karşılıklı)
+  [[-0.72, 0], [0.72, Math.PI]].forEach(([dz, rot]) => {
+    const cg = new THREE.Group();
+    cg.position.set(0, 0, dz);
+    cg.rotation.y = rot;
+    addTo(cg, CHR_LEG_GEO, M(0x4b5563), 0, 0.21, 0);
+    addTo(cg, CHR_SEAT_GEO, M(0x991b1b), 0, 0.44, 0);
+    addTo(cg, CHR_BACK_GEO, M(0x991b1b), 0, 0.68, -0.18);
+    tg.add(cg);
+  });
+  const foodPlate = new THREE.Group();
+  addTo(foodPlate, new THREE.CylinderGeometry(0.2, 0.16, 0.04, 8), M(0xffffff), 0, 0.84, 0);
+  addTo(foodPlate, B(0.24, 0.09, 0.12), M(0xd4a359), 0, 0.89, 0);
+  foodPlate.visible = false;
+  tg.add(foodPlate);
+  tb.foodPlate = foodPlate;
+  diningTablesGroup.add(tg);
+});
+diningTablesGroup.visible = false;
+scene.add(diningTablesGroup);
+
+// Garson (Servis Elemanı): beyaz gömlek, siyah pantolon, kırmızı papyon, elinde tepsi
+const waiterMesh = human(0xffffff, 0x111827, pick(SKINS), 0x1b1b1b);
+addTo(waiterMesh, B(0.14, 0.07, 0.04), M(0xdc2626), 0, 1.56, 0.16); // kırmızı papyon
+addTo(waiterMesh, B(0.42, 0.55, 0.04), M(0x111827), 0, 1.15, 0.16); // siyah yelek/önlük
+const waiterTray = new THREE.Group();
+addTo(waiterTray, new THREE.CylinderGeometry(0.26, 0.24, 0.03, 10), M(0xd1d5db), 0, 0, 0);
+addTo(waiterTray, B(0.24, 0.1, 0.12), M(0xd4a359), 0, 0.06, 0);
+waiterTray.position.set(0, -0.55, 0.24);
+waiterTray.visible = false;
+if(waiterMesh.getObjectByName('armR')) waiterMesh.getObjectByName('armR').add(waiterTray);
+if(typeof makeNameSprite === 'function') waiterMesh.add(makeNameSprite('🤵 GARSON'));
+waiterMesh.position.set(7.4, 0, -4.5);
+waiterMesh.rotation.y = Math.PI;
+waiterMesh.visible = false;
+scene.add(waiterMesh);
+const waiterState = {x: 7.4, z: -4.5, state: 'idle', targetCust: null, targetTb: null, ph: 0, timer: 0};
+
+// Kurye ve Paket Servis Motosikleti (karavanın sağ önünde)
+const courierGroup = new THREE.Group();
+courierGroup.position.set(6.4, 0, 3.8);
+courierGroup.rotation.y = -Math.PI / 2;
+// motosiklet gövdesi
+addTo(courierGroup, B(0.36, 0.45, 1.35), M(0xdc2626), 0, 0.48, 0);
+addTo(courierGroup, B(0.38, 0.12, 0.65), M(0x1f2937), 0, 0.74, 0.1); // sele
+addTo(courierGroup, B(0.7, 0.06, 0.06), M(0x9ca3af), 0, 0.96, -0.48); // gidon
+addTo(courierGroup, B(0.18, 0.48, 0.18), M(0x374151), 0, 0.68, -0.48); // ön maşa
+addTo(courierGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.14, 10).rotateZ(Math.PI / 2), M(0x111111), 0, 0.26, -0.52); // ön teker
+addTo(courierGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.14, 10).rotateZ(Math.PI / 2), M(0x111111), 0, 0.26, 0.52);  // arka teker
+// arka sıcak yemek çantası (sarı/turuncu paket kutusu)
+addTo(courierGroup, B(0.52, 0.48, 0.52), M(0xf59e0b), 0, 0.98, 0.52);
+const courierRider = human(0xea580c, 0x1f2937, pick(SKINS), 0x1b1b1b);
+addTo(courierRider, new THREE.SphereGeometry(0.23, 10, 8), M(0xfacc15), 0, 1.88, 0); // kurye kaskı
+if(typeof makeNameSprite === 'function') courierRider.add(makeNameSprite('🛵 PAKET KURYE'));
+courierRider.position.set(-0.65, 0, 0);
+courierGroup.add(courierRider);
+courierGroup.visible = false;
+scene.add(courierGroup);
+let phoneOrder = null, phoneOrderCD = 12;
+
 // dilenci: karavanın önünde oturur (kısa boylu), tıklayınca para ister; vardiyada bir kez 5₺ verilir
 const beggar = human(0x6b5a3a, 0x3a3a3a, pick(SKINS), 0x2a2a2a);
 // galerinin önünde yere uzanmış; önünde para tabağı
@@ -2332,15 +2414,19 @@ function renderStats(){
 let boardSig = '';
 function renderBoard(){
   const c = queue[0];
-  const sig = c ? (c.type + c.order.join() + c.waiting) : 'none';
+  const pSig = phoneOrder ? (phoneOrder.order.join() + Math.ceil(phoneOrder.t)) : 'noP';
+  const sig = (c ? (c.type + c.order.join() + c.waiting) : 'none') + '|' + pSig;
   if(sig === boardSig) return;
   boardSig = sig;
-  if(!c){ $('boardBody').innerHTML = '<i style="color:var(--mut)">Müşteri yok</i>'; return; }
-  if(!c.waiting){ $('boardBody').innerHTML = `<b>${c.T.label}</b> <i style="color:var(--mut)">yürüyor…</i>`; return; }
+  const phoneHTML = phoneOrder
+    ? `<div style="margin-top:5px;padding:4px 6px;border-radius:6px;background:rgba(180,83,9,.32);border:1px solid #f59e0b"><b style="color:#ffd54a">📱 Paket Sipariş (${Math.ceil(phoneOrder.t)}sn):</b><br>${phoneOrder.order.map(id => ING[id]).join(', ')} <b style="color:#4ade80">(2x Ücret!)</b></div>`
+    : '';
+  if(!c){ $('boardBody').innerHTML = '<i style="color:var(--mut)">Müşteri yok</i>' + phoneHTML; return; }
+  if(!c.waiting){ $('boardBody').innerHTML = `<b>${c.T.label}</b> <i style="color:var(--mut)">yürüyor…</i>` + phoneHTML; return; }
   const total = c.order.reduce((a, id) => a + PRICE[id], 0);
   $('boardBody').innerHTML = `<b>${c.T.label}</b><ol>` +
     c.order.map(id => `<li>${ING[id]}</li>`).join('') +
-    `</ol><div class="tp">~${Math.round(total * c.T.pay)}₺</div>`;
+    `</ol><div class="tp">~${Math.round(total * c.T.pay)}₺</div>` + phoneHTML;
 }
 
 function renderPlate(){
@@ -2401,6 +2487,9 @@ function renderStall(){
   comoStaffMesh.visible = !!(m.comoStaff || S.mk.comoStaff);
   cigCart.visible = false;
   securityCam.visible = !!(m.cam || S.mk.cam);
+  diningTablesGroup.visible = !!(k.masa || m.masa || S.kar.masa || S.mk.masa);
+  waiterMesh.visible = !!(k.garson || m.garson || S.kar.garson || S.mk.garson);
+  courierGroup.visible = !!(k.kurye || m.kurye || S.kar.kurye || S.mk.kurye);
   $('tablet').style.display = (m.cam || S.mk.cam) ? 'block' : 'none';
 }
 
@@ -4664,7 +4753,21 @@ function serve(auto = false){
       flash(`+${total}₺`, '#4ade80');
     }
     beep(880, 0.12);
-    c.leave(true);
+    const hasMasa = !!(S.kar.masa || S.mk.masa);
+    const freeTb = hasMasa ? TABLES_POS.find(tb => !tb.occupiedBy) : null;
+    if(freeTb){
+      const idx = queue.indexOf(c);
+      if(idx >= 0) queue.splice(idx, 1);
+      c.waiting = false;
+      c.walk = true;
+      c.diningState = 'to_table';
+      c.tableSlot = freeTb;
+      c.foodDelivered = false;
+      c.eatT = 6.5;
+      freeTb.occupiedBy = c;
+    } else {
+      c.leave(true);
+    }
   } else {
     flash('Yanlış sipariş!', '#f87171');
     beep(180, 0.25, 'sawtooth');
@@ -4675,6 +4778,32 @@ function serve(auto = false){
   renderAll();
 }
 $('serve').onclick = () => serve();
+
+// Kurye ve Telefon Siparişi teslim etme (2 katı ücret!)
+function deliverPhoneOrder(){
+  if(!phoneOrder){ flash('Şu an bekleyen telefon siparişi yok!', '#f87171'); return; }
+  if(plate.length === 0){ flash('Önce telefon siparişini tabakta hazırla!', '#f87171'); return; }
+  const want = phoneOrder.order.slice().sort().join(',');
+  const got = plate.map(p => p.id).sort().join(',');
+  if(want !== got){
+    flash(`🛵 Tabaktaki malzemeler telefon siparişiyle (${phoneOrder.order.map(id => ING[id]).join(', ')}) uyuşmuyor!`, '#f87171');
+    beep(200, 0.2, 'sawtooth');
+    return;
+  }
+  const base = phoneOrder.order.reduce((a, id) => a + PRICE[id], 0);
+  const pay = Math.round(base * 2.4) + 50; // 2 katından fazla paket servis ücreti + bahşiş
+  S.money += pay;
+  shiftEarned += pay;
+  S.xp = (S.xp || 0) + pay;
+  checkLevelUp();
+  plate = [];
+  phoneOrder = null;
+  phoneOrderCD = 22 + Math.random() * 14;
+  beep(980, 0.2);
+  flash(`🛵 Paket Sipariş Kuryeyle Gönderildi! +${pay}₺ (2x Kazanç!)`, '#4ade80');
+  renderAll();
+}
+if($('kuryeBtn')) $('kuryeBtn').onclick = deliverPhoneOrder;
 
 // çalışan: sıradaki müşterinin siparişini eksik malzemelerle tamamlar, tamamlanınca servis eder
 function workerStep(){
@@ -4720,6 +4849,12 @@ function startShift(){
   tm.charges = 1; tm.chargeT = 0; tm.slowT = 0;
   shutterOpen = true; shutter.visible = false;
   tamponUsed = false;
+  TABLES_POS.forEach(tb => { tb.occupiedBy = null; if(tb.foodPlate) tb.foodPlate.visible = false; });
+  waiterState.state = 'idle'; waiterState.targetCust = null; waiterState.targetTb = null;
+  waiterState.x = 7.4; waiterState.z = -4.5;
+  waiterMesh.position.set(7.4, 0, -4.5);
+  waiterTray.visible = false;
+  phoneOrder = null; phoneOrderCD = 12;
   // Mehmut: her vardiyada bir kez, rastgele bir anda gelir
   if(taxman){ scene.remove(taxman.g); taxman = null; }
   taxT = 60 + Math.random() * 60;
@@ -4887,7 +5022,10 @@ const MKT = [
   {id:'guard', name:'Güvenlik Görevlisi', desc:'Hırsızları karavana yaklaşmadan kovalar', price:400},
   {id:'cam', name:'Güvenlik Kamerası', desc:'Hırsızı daha erken görür ve kovalar', price:300},
   {id:'klima', name:'Klima', desc:'Market serinler, müşteriler daha sabırlı', price:600},
-  {id:'comoStaff', name:'COMOGENE Çalışanı', desc:'Dükkânda yemek hazırlayıp servis eder', price:500}
+  {id:'comoStaff', name:'COMOGENE Çalışanı', desc:'Dükkânda yemek hazırlayıp servis eder', price:500},
+  {id:'masa', name:'🪑 Masa & Sandalye Takımı', desc:'Dükkanın önüne masalar kurulur, oturan müşteriler +40₺ bahşiş bırakır', price:450},
+  {id:'garson', name:'🤵 Garson (Servis Elemanı)', desc:'Hazırlanan yemekleri masadaki müşterilere götürür (+25₺ ekstra bahşiş)', price:500},
+  {id:'kurye', name:'🛵 Kurye & Telefon Siparişi', desc:'Telefonla paket sipariş gelir, kuryeye teslim edince 2 katı ücret alırsın', price:600}
 ];
 function renderMarket(){
   const box = $('mktBody');
@@ -5071,6 +5209,11 @@ canvas.addEventListener('pointerup', e => {
   ray.setFromCamera(ptr, camera);
   // saate dokunmak = saati söyle
   if(ray.intersectObject(clockMesh, false).length){ sayTime(); return; }
+  // kuryeye dokunmak = telefon siparişini teslim et
+  if((S.kar.kurye || S.mk.kurye) && courierGroup.visible && ray.intersectObject(courierGroup, true).length){
+    deliverPhoneOrder();
+    return;
+  }
   // terörist: silah kuşanıksa vur, silahcı: dükkânı aç, çark: çevir
   if(ray.intersectObject(wheelGroup, true).length){ spinWheel(); return; }
   const tHit = terrorists.find(t => !t.dead && ray.intersectObject(t.g, true).length);
@@ -6444,6 +6587,56 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
   custs.forEach(c => {
     if(c.leaving){
       c.x += c.vx * dt; c.z += c.vz * dt;
+    } else if(c.diningState){
+      const tb = c.tableSlot;
+      if(c.diningState === 'to_table' && tb){
+        const dx = tb.seatX - c.x, dz = tb.seatZ - c.z;
+        const dist = Math.hypot(dx, dz);
+        if(dist > 0.12){
+          c.x += (dx / dist) * WALK * dt;
+          c.z += (dz / dist) * WALK * dt;
+          c.g.rotation.y = Math.atan2(dx, dz);
+          c.walk = true;
+        } else {
+          c.x = tb.seatX; c.z = tb.seatZ;
+          c.g.rotation.y = 0; // masaya dönsün
+          c.walk = false;
+          const hasGarson = !!(S.kar.garson || S.mk.garson);
+          if(hasGarson){
+            c.diningState = 'waiting_food';
+            c.waitFoodT = 14;
+          } else {
+            c.diningState = 'eating';
+            if(tb.foodPlate) tb.foodPlate.visible = true;
+          }
+        }
+      } else if(c.diningState === 'waiting_food'){
+        c.walk = false;
+        c.waitFoodT = (c.waitFoodT || 14) - dt;
+        if(c.waitFoodT <= 0){
+          c.diningState = 'eating';
+          if(tb && tb.foodPlate) tb.foodPlate.visible = true;
+        }
+      } else if(c.diningState === 'eating'){
+        c.walk = false;
+        c.eatT -= dt;
+        if(c.eatT <= 0){
+          if(tb){
+            if(tb.foodPlate) tb.foodPlate.visible = false;
+            tb.occupiedBy = null;
+          }
+          c.diningState = null;
+          c.tableSlot = null;
+          const masaTip = c.foodDelivered ? 65 : 40;
+          S.money += masaTip;
+          shiftEarned += masaTip;
+          S.xp = (S.xp || 0) + masaTip;
+          checkLevelUp();
+          flash(c.foodDelivered ? `🪑🤵 Müşteri masada garson servisiyle yedi! +${masaTip}₺ Bahşiş!` : `🪑 Müşteri masada yemeğini yedi! +${masaTip}₺ Masa Bahşişi!`, '#4ade80');
+          changed = true;
+          c.leave(true);
+        }
+      }
     } else {
       const d = c.slotZ - c.z;
       if(d > 0.05){
@@ -6463,11 +6656,19 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
         }
       }
     }
+    const isSitting = c.diningState === 'waiting_food' || c.diningState === 'eating';
     c.ph += dt * (c.walk ? 7 : 2);
     const swing = c.walk ? Math.sin(c.ph) * 0.6 : 0;
-    legPose(c.legL, swing); legPose(c.legR, -swing);
-    c.armL.rotation.x = -swing * 0.7; c.armR.rotation.x = swing * 0.7;
-    c.g.position.set(c.x, c.walk ? Math.abs(Math.sin(c.ph)) * 0.05 : 0, c.z);
+    if(isSitting){
+      legPose(c.legL, -1.1); legPose(c.legR, -1.1);
+      c.armL.rotation.x = -0.6 + (c.diningState === 'eating' ? Math.sin(c.ph * 3) * 0.25 : 0);
+      c.armR.rotation.x = -0.6 - (c.diningState === 'eating' ? Math.sin(c.ph * 3) * 0.25 : 0);
+      c.g.position.set(c.x, -0.15, c.z);
+    } else {
+      legPose(c.legL, swing); legPose(c.legR, -swing);
+      c.armL.rotation.x = -swing * 0.7; c.armR.rotation.x = swing * 0.7;
+      c.g.position.set(c.x, c.walk ? Math.abs(Math.sin(c.ph)) * 0.05 : 0, c.z);
+    }
     if(c.child){ c.child.position.set(c.x - 0.7, 0, c.z + 0.3); c.child.visible = c.g.visible; }
     if(c.kick){
       // çarpışmada havalanıp dönerek yere düşer (konum değişmez, sadece görsel)
@@ -6483,6 +6684,98 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
     }
   });
   custs = custs.filter(c => !c.dead);
+
+  // Garson (Yemekleri tezgâhtan alıp masadaki müşterilere götüren adam)
+  if((S.kar.garson || S.mk.garson) && waiterMesh.visible){
+    let wWalk = false;
+    const wLegL = waiterMesh.getObjectByName('legL'), wLegR = waiterMesh.getObjectByName('legR');
+    const wArmL = waiterMesh.getObjectByName('armL'), wArmR = waiterMesh.getObjectByName('armR');
+    if(waiterState.state === 'idle'){
+      const needCust = custs.find(c => c.diningState === 'waiting_food' && c.tableSlot);
+      if(needCust){
+        waiterState.targetCust = needCust;
+        waiterState.targetTb = needCust.tableSlot;
+        waiterState.state = 'to_counter';
+      } else {
+        const dx = 7.4 - waiterState.x, dz = -4.5 - waiterState.z;
+        const d = Math.hypot(dx, dz);
+        if(d > 0.1){
+          waiterState.x += (dx / d) * 3.2 * dt;
+          waiterState.z += (dz / d) * 3.2 * dt;
+          waiterMesh.rotation.y = Math.atan2(dx, dz);
+          wWalk = true;
+        } else {
+          waiterMesh.rotation.y = Math.PI;
+        }
+      }
+    } else if(waiterState.state === 'to_counter'){
+      const dx = 7.4 - waiterState.x, dz = -2.2 - waiterState.z;
+      const d = Math.hypot(dx, dz);
+      if(d > 0.12){
+        waiterState.x += (dx / d) * 3.6 * dt;
+        waiterState.z += (dz / d) * 3.6 * dt;
+        waiterMesh.rotation.y = Math.atan2(dx, dz);
+        wWalk = true;
+      } else {
+        waiterTray.visible = true;
+        waiterState.state = 'to_table';
+      }
+    } else if(waiterState.state === 'to_table'){
+      const tb = waiterState.targetTb;
+      if(!tb || !waiterState.targetCust || waiterState.targetCust.dead){
+        waiterTray.visible = false;
+        waiterState.state = 'idle';
+      } else {
+        const tx = tb.x + 0.75, tz = tb.z;
+        const dx = tx - waiterState.x, dz = tz - waiterState.z;
+        const d = Math.hypot(dx, dz);
+        if(d > 0.14){
+          waiterState.x += (dx / d) * 3.6 * dt;
+          waiterState.z += (dz / d) * 3.6 * dt;
+          waiterMesh.rotation.y = Math.atan2(dx, dz);
+          wWalk = true;
+        } else {
+          waiterTray.visible = false;
+          if(tb.foodPlate) tb.foodPlate.visible = true;
+          if(waiterState.targetCust){
+            waiterState.targetCust.diningState = 'eating';
+            waiterState.targetCust.foodDelivered = true;
+          }
+          waiterState.targetCust = null;
+          waiterState.targetTb = null;
+          waiterState.state = 'idle';
+        }
+      }
+    }
+    waiterState.ph += dt * (wWalk ? 8 : 2);
+    const wSw = wWalk ? Math.sin(waiterState.ph) * 0.6 : 0;
+    if(wLegL) legPose(wLegL, wSw);
+    if(wLegR) legPose(wLegR, -wSw);
+    if(wArmL) wArmL.rotation.x = -wSw * 0.6;
+    if(wArmR) wArmR.rotation.x = waiterTray.visible ? -1.1 : wSw * 0.6;
+    waiterMesh.position.set(waiterState.x, wWalk ? Math.abs(Math.sin(waiterState.ph)) * 0.04 : 0, waiterState.z);
+  }
+
+  // Kurye & Telefon Siparişi sistemi
+  if(play && (S.kar.kurye || S.mk.kurye) && !D.driving){
+    if(phoneOrder){
+      phoneOrder.t -= dt;
+      if(phoneOrder.t <= 0){
+        phoneOrder = null;
+        phoneOrderCD = 20 + Math.random() * 12;
+        flash('📱 Telefon siparişi süresi doldu, iptal edildi!', '#f87171');
+        changed = true;
+      }
+    } else {
+      phoneOrderCD -= dt;
+      if(phoneOrderCD <= 0){
+        phoneOrder = {order: buildOrder(pickType()), t: 55};
+        beep(740, 0.14);
+        flash('📱 YENİ PAKET SİPARİŞ GELDİ! Hazırlayıp 🛵 Kurye Teslim ile gönder (2x Kazanç!)', '#38bdf8');
+        changed = true;
+      }
+    }
+  }
 
   // et parçacıkları
   parts.forEach(p => {
@@ -6722,6 +7015,10 @@ function frame(now){
   const nearWheel = !C.driving && !D.driving && !CM.driving && Math.hypot(P.x - WHEEL_POS.x, P.z - WHEEL_POS.z) < 5.5;
   disp('wheelBtn', nearWheel ? 'block' : 'none');
   if(nearWheel) txt('wheelBtn', `🎡 Çark (100₺ · ${wheelSpinsLeft}/3)`);
+  const hasKurye = !!(S.kar.kurye || S.mk.kurye);
+  const nearKurye = !C.driving && !D.driving && !CM.driving && (nc || Math.hypot(P.x - 6.4, P.z - 3.8) < 4.5);
+  disp('kuryeBtn', (hasKurye && phoneOrder && nearKurye) ? 'block' : 'none');
+  if(hasKurye && phoneOrder && nearKurye) txt('kuryeBtn', `🛵 Kurye Teslim (${Math.ceil(phoneOrder.t)}s)`);
   const hIn = inHouse(), hNear = nearHome() && !D.driving;
   disp('home', (hIn || hNear) && !D.driving ? 'block' : 'none');
   txt('home', hIn ? '🛏 Dinlen' : '🏠 Eve Git');
@@ -7688,7 +7985,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-24-002339';
+const APP_VERSION = '2026-10-24-005403';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
