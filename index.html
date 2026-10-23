@@ -188,6 +188,7 @@ button small{font-size:9px;margin-top:0}
   <button id="endDay" title="Günü Bitir">🌙<span class="t"> Günü Bitir</span></button>
   <button id="charBtn" title="Karakter">🧑<span class="t"> Karakter</span></button>
   <button id="frBtn" title="Arkadaşlar">👥<span class="t"> Arkadaşlar</span></button>
+  <button id="chatBtn" title="Sohbet">💬<span class="t"> Sohbet</span></button>
   <button id="leadBtn" title="Liderlik Tablosu">🏆<span class="t"> Liderlik</span></button>
   <button id="nightBtn" title="Gece">🌙<span class="t"> Gece</span></button>
   <button id="codeBtn" title="Kod">🎟<span class="t"> Kod</span></button>
@@ -367,6 +368,39 @@ button small{font-size:9px;margin-top:0}
       <button id="frDelYes" class="wide" style="margin:0;background:#b91c1c;border-color:transparent">Evet, Sil</button>
       <button id="frDelNo" class="wide" style="margin:0">İptal</button>
     </div>
+  </div>
+</div>
+<div id="moneyModal" class="modal" style="z-index:26">
+  <div class="card" style="text-align:center;max-width:350px">
+    <h2>💸 Para Gönder</h2>
+    <p id="moneyTargetText" style="font-size:14px;margin-bottom:8px"></p>
+    <input id="moneyAmtIn" type="number" min="1" placeholder="Gönderilecek tutar (₺)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#222b38;color:var(--ink);font-size:16px">
+    <div style="display:flex;gap:6px;margin-top:8px;justify-content:center">
+      <button class="mQuick" data-v="100" style="padding:6px 10px;font-size:12px">+100₺</button>
+      <button class="mQuick" data-v="500" style="padding:6px 10px;font-size:12px">+500₺</button>
+      <button class="mQuick" data-v="1000" style="padding:6px 10px;font-size:12px">+1000₺</button>
+    </div>
+    <div id="moneyMsg" style="color:var(--bad);min-height:18px;font-size:13px;margin-top:6px;font-weight:600"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button id="moneySendConfirm" class="wide" style="margin:0;background:#16a34a;border-color:#4ade80">💸 Gönder</button>
+      <button id="moneySendCancel" class="wide" style="margin:0">İptal</button>
+    </div>
+  </div>
+</div>
+<div id="chatBox" class="panel" style="display:none;left:10px;top:92px;width:250px;max-height:220px;z-index:8;padding:8px;flex-direction:column;gap:6px">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <b style="font-size:13px;color:#ffd54a">💬 Oyun İçi Sohbet</b>
+    <button id="chatClose" style="padding:2px 7px;font-size:11px">✕</button>
+  </div>
+  <div id="chatLog" style="height:105px;overflow-y:auto;font-size:12px;background:rgba(0,0,0,.35);padding:6px;border-radius:6px;display:flex;flex-direction:column;gap:4px"></div>
+  <div style="display:flex;gap:4px;flex-wrap:wrap">
+    <button class="cQuick" data-m="Selam! 👋" style="padding:3px 6px;font-size:11px">👋 Selam</button>
+    <button class="cQuick" data-m="Gel yarışalım! 🏎️" style="padding:3px 6px;font-size:11px">🏎️ Yarışalım</button>
+    <button class="cQuick" data-m="Teşekkürler! ❤️" style="padding:3px 6px;font-size:11px">❤️ Teşekkür</button>
+  </div>
+  <div style="display:flex;gap:4px">
+    <input id="chatIn" maxlength="60" placeholder="Mesaj yaz..." style="flex:1;padding:6px;font-size:12px;border-radius:6px;border:1px solid var(--line);background:#222b38;color:var(--ink)">
+    <button id="chatSend" style="padding:6px 10px;font-size:12px;background:#1e3a52;border-color:#4ade80">Gönder</button>
   </div>
 </div>
 <div id="prof" class="modal">
@@ -2558,6 +2592,106 @@ function makeNameSprite(text){
   sp.renderOrder = 10;
   return sp;
 }
+function makeChatBubbleSprite(text){
+  const cv = document.createElement('canvas');
+  cv.width = 320; cv.height = 80;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(10, 8, 300, 56, 18);
+  else ctx.rect(10, 8, 300, 56);
+  ctx.fill();
+  ctx.strokeStyle = '#ffb020';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.font = 'bold 22px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#141820';
+  ctx.fillText(String(text).slice(0, 32), 160, 36);
+  const t = new THREE.CanvasTexture(cv);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: t, transparent: true, depthTest: false}));
+  sp.scale.set(2.1, 0.52, 1);
+  sp.position.set(0, 2.86, 0);
+  sp.renderOrder = 12;
+  return sp;
+}
+const processedCoopEvents = new Set();
+function showPeerChatBubble(peer, text){
+  if(!peer) return;
+  if(peer.chatSprite && peer.chatSprite.parent) peer.chatSprite.parent.remove(peer.chatSprite);
+  const sp = makeChatBubbleSprite('💬 ' + text);
+  const targetParent = (peer.carMesh && !peer.g.visible) ? peer.carMesh : peer.g;
+  if(targetParent){
+    sp.position.set(0, targetParent === peer.carMesh ? 2.55 : 2.86, 0);
+    targetParent.add(sp);
+  }
+  peer.chatSprite = sp;
+  peer.chatExpire = Date.now() + 6500;
+}
+function appendChatLog(user, text, isMe){
+  const log = $('chatLog');
+  if(!log) return;
+  const d = document.createElement('div');
+  d.style.cssText = 'padding:4px 6px;border-radius:6px;word-break:break-word;background:' + (isMe ? 'rgba(74,222,128,.16)' : 'rgba(255,255,255,.08)');
+  const b = document.createElement('b');
+  b.style.color = isMe ? '#4ade80' : '#ffd54a';
+  b.textContent = user + ': ';
+  const s = document.createElement('span');
+  s.textContent = text;
+  d.appendChild(b);
+  d.appendChild(s);
+  log.appendChild(d);
+  while(log.children.length > 30) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+function sendChatMessage(rawText){
+  const text = String(rawText || '').trim().slice(0, 60);
+  if(!text) return;
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
+  const id = 'ch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  processedCoopEvents.add(id);
+  appendChatLog(myName, text, true);
+  const pkt = {type: 'chat', id, user: myName, text, room: activeFriendAcct || myName, ts: Date.now()};
+  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+  postToRelays(pkt, true);
+  flash(`💬 ${myName}: ${text}`, '#7dd3fc');
+}
+let moneyTargetUser = '';
+function openSendMoneyModal(targetUser){
+  moneyTargetUser = targetUser;
+  if($('moneyTargetText')) $('moneyTargetText').innerHTML = `<b>${targetUser}</b> adlı oyuncuya para gönder:<br><small style="color:var(--mut)">Senin paran: <b>${(S.money || 0).toLocaleString('tr-TR')}₺</b></small>`;
+  if($('moneyAmtIn')) $('moneyAmtIn').value = '';
+  if($('moneyMsg')) $('moneyMsg').textContent = '';
+  if($('moneyModal')) $('moneyModal').style.display = 'flex';
+}
+function handleSpecialCoopEvent(msg){
+  if(!msg || !msg.id || processedCoopEvents.has(msg.id)) return;
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
+  if(msg.type === 'chat' && msg.text){
+    if(myName && msg.user && msg.user.toLowerCase() === myName.toLowerCase()) return;
+    processedCoopEvents.add(msg.id);
+    appendChatLog(msg.user, msg.text, false);
+    const k = String(msg.user || '').toLowerCase();
+    if(roomPeers[k]) showPeerChatBubble(roomPeers[k], msg.text);
+    if($('chatBox')) $('chatBox').style.display = 'flex';
+    beep(620, 0.08);
+    flash(`💬 ${msg.user}: ${msg.text}`, '#ffd54a');
+  } else if(msg.type === 'money_send' && msg.to && myName && msg.to.toLowerCase() === myName.toLowerCase()){
+    const amt = Math.floor(Number(msg.amount) || 0);
+    if(amt <= 0) return;
+    processedCoopEvents.add(msg.id);
+    S.money = (S.money || 0) + amt;
+    save();
+    renderAll();
+    if(escPaused) renderFriends();
+    if($('leadModal') && $('leadModal').style.display === 'flex') renderLeaderboard();
+    broadcastCoopPos(true);
+    beep(880, 0.18);
+    flash(`💸 ${msg.user} sana ${amt.toLocaleString('tr-TR')}₺ gönderdi!`, '#4ade80');
+    appendChatLog('Sistem', `💸 ${msg.user} sana ${amt.toLocaleString('tr-TR')}₺ gönderdi!`, false);
+  }
+}
 const knownPlayers = {}; // sunucudan / ağdan bilinen tüm gerçek oyuncular
 const lastAcctSaveTs = {};
 function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs, extra){
@@ -2908,6 +3042,10 @@ function broadcastCoopPos(force){
 function handleIncomingCoopMsg(msg){
   if(!msg || !msg.user) return;
   if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
+  if(msg.type === 'chat' || msg.type === 'money_send'){
+    handleSpecialCoopEvent(msg);
+    if(msg.type === 'chat' || msg.type === 'money_send') return;
+  }
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(myName && msg.user.toLowerCase() === myName.toLowerCase()) return;
   const k = String(msg.user).toLowerCase();
@@ -3032,6 +3170,7 @@ async function pollOnlineStatus(forceFull){
             const msg = JSON.parse(outer.message);
             if(!msg) return;
             if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
+            if(msg.type === 'chat' || msg.type === 'money_send'){ handleSpecialCoopEvent(msg); return; }
             if(msg.user){
               const serverMs = outer.time ? outer.time * 1000 : 0;
               msg._ord = serverMs;
@@ -3309,6 +3448,19 @@ function updateFriendCompanion(dt){
       fc.carMesh = null;
       fc.carSignature = '';
     }
+    if(fc.chatSprite){
+      if(now > (fc.chatExpire || 0)){
+        if(fc.chatSprite.parent) fc.chatSprite.parent.remove(fc.chatSprite);
+        fc.chatSprite = null;
+      } else {
+        const wantParent = (fc.carMesh && !fc.g.visible) ? fc.carMesh : fc.g;
+        if(wantParent && fc.chatSprite.parent !== wantParent){
+          if(fc.chatSprite.parent) fc.chatSprite.parent.remove(fc.chatSprite);
+          fc.chatSprite.position.set(0, wantParent === fc.carMesh ? 2.55 : 2.86, 0);
+          wantParent.add(fc.chatSprite);
+        }
+      }
+    }
   }
 }
 // arkadaş listesi (yalnızca gerçek ve aktif arkadaşlarla oynanabilir)
@@ -3446,6 +3598,11 @@ function renderFriends(){
         enterBtn.onclick = () => enterFriendAccount(n);
         actions.appendChild(enterBtn);
       }
+      const payBtn = document.createElement('button');
+      payBtn.textContent = '💸 Para Gönder';
+      payBtn.style.cssText = 'padding:5px 8px;font-size:12px;font-weight:600;background:#1e4a2a;border-color:#ffd54a';
+      payBtn.onclick = () => openSendMoneyModal(n);
+      actions.appendChild(payBtn);
     }
     const del = document.createElement('button');
     del.textContent = 'Sil';
@@ -3510,6 +3667,63 @@ $('frAdd').onclick = async () => {
   if(msgEl){ msgEl.style.color = '#4ade80'; msgEl.textContent = `${canonicalName} eklendi! (${actNow ? 'Çevrimiçi — Haritasına girebilirsin' : 'Şu an çevrimdışı'})`; }
   renderFriends();
   flash(`${canonicalName} arkadaş olarak eklendi!`, '#4ade80');
+};
+if($('chatBtn')) $('chatBtn').onclick = () => {
+  const cb = $('chatBox');
+  if(!cb) return;
+  cb.style.display = cb.style.display === 'flex' ? 'none' : 'flex';
+  if(cb.style.display === 'flex' && $('chatIn')) $('chatIn').focus();
+};
+if($('chatClose')) $('chatClose').onclick = () => {
+  if($('chatBox')) $('chatBox').style.display = 'none';
+};
+if($('chatSend')) $('chatSend').onclick = () => {
+  if(!$('chatIn')) return;
+  sendChatMessage($('chatIn').value);
+  $('chatIn').value = '';
+};
+if($('chatIn')) $('chatIn').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    sendChatMessage($('chatIn').value);
+    $('chatIn').value = '';
+  }
+});
+document.querySelectorAll('.cQuick').forEach(btn => {
+  btn.onclick = () => sendChatMessage(btn.dataset.m || btn.textContent);
+});
+document.querySelectorAll('.mQuick').forEach(btn => {
+  btn.onclick = () => {
+    const inp = $('moneyAmtIn');
+    if(!inp) return;
+    inp.value = (Number(inp.value) || 0) + (Number(btn.dataset.v) || 0);
+  };
+});
+if($('moneySendCancel')) $('moneySendCancel').onclick = () => {
+  if($('moneyModal')) $('moneyModal').style.display = 'none';
+};
+if($('moneySendConfirm')) $('moneySendConfirm').onclick = () => {
+  const amt = Math.floor(Number($('moneyAmtIn') && $('moneyAmtIn').value) || 0);
+  const msgEl = $('moneyMsg');
+  if(!moneyTargetUser){ if(msgEl) msgEl.textContent = 'Oyuncu seçilmedi'; return; }
+  if(amt <= 0){ if(msgEl) msgEl.textContent = 'Geçerli bir tutar yaz!'; return; }
+  if((S.money || 0) < amt){ if(msgEl) msgEl.textContent = 'Yeterli paran yok!'; flash('Paran yetmiyor!', '#f87171'); return; }
+  S.money -= amt;
+  save();
+  const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
+  const id = 'ms_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  processedCoopEvents.add(id);
+  const pkt = {type: 'money_send', id, user: myName, to: moneyTargetUser, amount: amt, ts: Date.now()};
+  if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
+  postToRelays(pkt, true);
+  broadcastCoopPos(true);
+  if($('moneyModal')) $('moneyModal').style.display = 'none';
+  renderAll();
+  if(escPaused) renderFriends();
+  beep(760, 0.15);
+  flash(`💸 ${moneyTargetUser} adlı oyuncuya ${amt.toLocaleString('tr-TR')}₺ gönderildi!`, '#4ade80');
+  appendChatLog('Sistem', `💸 ${moneyTargetUser} adlı oyuncuya ${amt.toLocaleString('tr-TR')}₺ gönderdin.`, true);
 };
 window.addEventListener('keydown', e => {
   if(e.key === 'Escape') togglePause();
@@ -6608,7 +6822,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-202904';
+const APP_VERSION = '2026-10-23-204921';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
