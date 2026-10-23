@@ -3950,16 +3950,40 @@ function triggerDanceAndFirework(){
 }
 if($('emoteBtn')) $('emoteBtn').onclick = triggerDanceAndFirework;
 
-// Araba Radyosu (Gerçek Sesli: Roblox Şarkı Kodu, Şarkı Adı, YouTube veya MP3 Linki)
+// Araba Radyosu (Gerçek Sesli Tam Şarkı: Roblox Şarkı Kodu, Şarkı Adı, YouTube veya MP3 Linki)
 const ROBLOX_KNOWN_SONGS = {
-  '142376088': {q: 'Parry Gripp Raining Tacos', url: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/47/a6/d4/47a6d4ab-edd7-5668-7b93-8b5d39694b53/mzaf_1866602973081693879.plus.aac.p.m4a', title: 'Parry Gripp - Raining Tacos'},
-  '1841647093': {q: 'Teriyaki Boyz Tokyo Drift', title: 'Tokyo Drift'},
-  '4592669963': {q: 'Vicetone Tony Igy Astronomia', title: 'Astronomia (Coffin Dance)'},
+  '142376088': {q: 'Parry Gripp Raining Tacos', url: 'https://archive.org/download/its-raining-tacos-roblox-music-video-fj-r-0u-ukzcp-y/ITS%20RAINING%20TACOS_%20%28Roblox%20Music%20Video%29%20%5BfjR0uUKZCpY%5D.mp3', title: 'Parry Gripp - Raining Tacos (Tam Şarkı)'},
+  '1841647093': {q: 'Teriyaki Boyz Tokyo Drift', url: 'https://archive.org/download/tokyo-drift-teriyaki-boyz-music-video-hd_202104s/Tokyo%20Drift%20-%20Teriyaki%20Boyz%20%5B%20MUSIC%20VIDEO%20%5D%20HD.mp3', title: 'Teriyaki Boyz - Tokyo Drift (Tam Şarkı)'},
+  '4592669963': {q: 'Vicetone Tony Igy Astronomia', url: 'https://archive.org/download/soundcloud-164081893/Vicetone_Tony_Igy_-_Astronomia_2014_Radio_Edit-164081893.mp3', title: 'Astronomia - Coffin Dance (Tam Şarkı)'},
   '6847929757': {q: 'Kordhell Murder In My Mind', title: 'Phonk - Murder In My Mind'},
-  '130778839': {q: 'Andrew Gold Spooky Scary Skeletons', title: 'Spooky Scary Skeletons'},
+  '130778839': {q: 'Andrew Gold Spooky Scary Skeletons', url: 'https://archive.org/download/doot-doot-vs-spooky-scary-skeletons-meme-melee-halloween-special/Doot%20Doot%20vs%20Spooky%20Scary%20Skeletons%20%EF%BD%9C%20Meme%20Melee%20Halloween%20Special.mp3', title: 'Spooky Scary Skeletons (Tam Şarkı)'},
   '614018503': {q: 'Toby Fox Megalovania', title: 'Megalovania'},
   '1837879082': {q: 'Crab Rave Noisestorm', title: 'Crab Rave'}
 };
+async function searchFullSongOnArchive(query){
+  try{
+    const q = `title:(${query.replace(/[^\w\sğüşıöçĞÜŞİÖÇ]/g, ' ').trim()}) AND mediatype:(audio)`;
+    const r = await fetch(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl[]=identifier,title&rows=4&output=json`);
+    if(!r.ok) return null;
+    const d = await r.json();
+    const docs = (d && d.response && d.response.docs) || [];
+    for(const doc of docs){
+      if(!doc || !doc.identifier) continue;
+      const mr = await fetch(`https://archive.org/metadata/${encodeURIComponent(doc.identifier)}/files`);
+      if(!mr.ok) continue;
+      const md = await mr.json();
+      const files = (md && md.result) || [];
+      const mp3 = files.find(f => f && f.name && /\.(mp3|m4a|ogg)$/i.test(f.name) && (!f.length || parseFloat(f.length) >= 45) && (!f.length || parseFloat(f.length) <= 900));
+      if(mp3){
+        return {
+          url: `https://archive.org/download/${encodeURIComponent(doc.identifier)}/${encodeURIComponent(mp3.name)}`,
+          title: (doc.title || query) + ' (Tam Şarkı)'
+        };
+      }
+    }
+  }catch(e){}
+  return null;
+}
 let radioActiveName = '', radioAudioEl = null, radioReqSeq = 0;
 function broadcastRadioSync(codeStr){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
@@ -4060,7 +4084,14 @@ async function playRadioByCode(rawCode, fromSync){
     }catch(e){}
   }
   if(mySeq !== radioReqSeq) return;
-  // 4) Şarkının gerçek ses kaydını iTunes API üzerinden bulup çal
+  // 4) Önce tam uzunlukta (kesilmeyen) MP3 kaydını bulup çal
+  const fullSong = await searchFullSongOnArchive(searchQuery);
+  if(mySeq !== radioReqSeq) return;
+  if(fullSong && fullSong.url){
+    startRealAudioStream(fullSong.url, fullSong.title, code, fromSync);
+    return;
+  }
+  // 5) Yedek olarak iTunes API üzerinden gerçek ses kaydını bulup çal
   try{
     const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&entity=song&limit=1`);
     if(mySeq !== radioReqSeq) return;
@@ -7466,7 +7497,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-231129';
+const APP_VERSION = '2026-10-23-232101';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
