@@ -2805,9 +2805,10 @@ function handleSpecialCoopEvent(msg){
   } else if(msg.type === 'radio_sync'){
     if(myName && msg.user && msg.user.toLowerCase() === myName.toLowerCase()) return;
     processedCoopEvents.add(msg.id);
-    if(passengerOf && msg.user && passengerOf === msg.user.toLowerCase()){
-      if(msg.code && typeof playRadioByCode === 'function') playRadioByCode(msg.code, true);
-      else if(typeof stopCarRadio === 'function') stopCarRadio(true);
+    const k = String(msg.user || '').toLowerCase();
+    if(onlineFriends[k]) onlineFriends[k].rc = String(msg.code || '');
+    if(roomPeers[k] && typeof updatePeerCarRadio === 'function'){
+      updatePeerCarRadio(roomPeers[k], String(msg.code || ''));
     }
   }
 }
@@ -2853,6 +2854,7 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs, extra){
     ch: (isNewerPos && typeof ex.ch === 'number') ? ex.ch : ((prev && typeof prev.ch === 'number') ? prev.ch : 0),
     cslip: (isNewerPos && typeof ex.cslip === 'number') ? ex.cslip : ((prev && typeof prev.cslip === 'number') ? prev.cslip : 0),
     csteer: (isNewerPos && typeof ex.csteer === 'number') ? ex.csteer : ((prev && typeof prev.csteer === 'number') ? prev.csteer : 0),
+    rc: (isNewerPos && typeof ex.rc === 'string') ? ex.rc : ((prev && typeof prev.rc === 'string') ? prev.rc : ''),
     chaz: (isNewerPos && typeof ex.chaz === 'boolean') ? ex.chaz : !!(prev && prev.chaz),
     cbrk: (isNewerPos && typeof ex.cbrk === 'boolean') ? ex.cbrk : !!(prev && prev.cbrk),
     cbm: (isNewerPos && typeof ex.cbm === 'boolean') ? ex.cbm : !!(prev && prev.cbm),
@@ -3054,6 +3056,7 @@ function removeRoomPeer(name){
   if(p){
     if(p.g) scene.remove(p.g);
     if(p.carMesh) scene.remove(p.carMesh);
+    if(p.radioEl){ try{ p.radioEl.pause(); p.radioEl.src = ''; }catch(e){} p.radioEl = null; }
     delete roomPeers[k];
   }
   if(friendComp && friendComp.name.toLowerCase() === k) friendComp = null;
@@ -3063,6 +3066,7 @@ function clearAllRoomPeers(){
     if(roomPeers[k]){
       if(roomPeers[k].g) scene.remove(roomPeers[k].g);
       if(roomPeers[k].carMesh) scene.remove(roomPeers[k].carMesh);
+      if(roomPeers[k].radioEl){ try{ roomPeers[k].radioEl.pause(); roomPeers[k].radioEl.src = ''; }catch(e){} roomPeers[k].radioEl = null; }
     }
     delete roomPeers[k];
   });
@@ -3132,7 +3136,8 @@ function requestOnlinePing(){
   if(!myName) return;
   const wp = getMyWorldPos();
   const gunId = (S.hand && S.hand.id && S.hand.id !== 'sarjor' && !C.driving && !D.driving && !CM.driving) ? S.hand.id : '';
-  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, gun: gunId, car: S.car, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), csteer: Number((C.steer || 0).toFixed(2)), chaz: !!C.hazard, cbrk: !!C.braking, cbm: !!C.beamOn, mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
+  const rcVal = typeof myRadioCode === 'string' ? myRadioCode : '';
+  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, gun: gunId, rc: rcVal, car: S.car, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), csteer: Number((C.steer || 0).toFixed(2)), chaz: !!C.hazard, cbrk: !!C.braking, cbm: !!C.beamOn, mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   postToRelays(pkt, true);
 }
@@ -3145,7 +3150,8 @@ function broadcastCoopPos(force){
   const cbrkVal = !!C.braking;
   const cbmVal = !!C.beamOn;
   const gunId = (S.hand && S.hand.id && S.hand.id !== 'sarjor' && !C.driving && !D.driving && !CM.driving) ? S.hand.id : '';
-  const sigKey = `${csteerVal > 0.3 ? 1 : (csteerVal < -0.3 ? -1 : 0)}|${chazVal}|${cbrkVal}|${cbmVal}|${gunId}`;
+  const rcVal = typeof myRadioCode === 'string' ? myRadioCode : '';
+  const sigKey = `${csteerVal > 0.3 ? 1 : (csteerVal < -0.3 ? -1 : 0)}|${chazVal}|${cbrkVal}|${cbmVal}|${gunId}|${rcVal}`;
   const sigChanged = sigKey !== lastBroadSigKey;
   const moved = Math.hypot(wp.x - lastBroadX, wp.z - lastBroadZ) > 0.02 || Math.abs(wp.yaw - lastBroadYaw) > 0.05 || sigChanged;
   const currentRoom = activeFriendAcct || myName;
@@ -3159,8 +3165,8 @@ function broadcastCoopPos(force){
   const cslipVal = Number((C.slip || 0).toFixed(2));
   // Yürürken ve araba sürerken anında (~80ms) WebSocket üzerinden gönder ki karşıda hiç beklemeden görünsün
   const pkt = force
-    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, gun: gunId, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
-    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, gun: gunId, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, ts: now};
+    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, gun: gunId, rc: rcVal, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
+    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, gun: gunId, rc: rcVal, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const minInterval = moved ? 80 : 2500;
   if(!force && !sigChanged && now - lastCoopBroadcast < minInterval) return;
@@ -3595,11 +3601,16 @@ function updateFriendCompanion(dt){
           lg.sigR.forEach(m => m.visible = rOn);
           lg.sigL.forEach(m => m.visible = lOn);
         }
+        const peerRc = (on && typeof on.rc === 'string') ? on.rc : '';
+        if(peerRc !== (fc.radioCode || '')){
+          if(typeof updatePeerCarRadio === 'function') updatePeerCarRadio(fc, peerRc);
+        }
       }
     } else if(fc.carMesh){
       scene.remove(fc.carMesh);
       fc.carMesh = null;
       fc.carSignature = '';
+      if(fc.radioEl){ try{ fc.radioEl.pause(); fc.radioEl.src = ''; }catch(e){} fc.radioEl = null; fc.radioCode = ''; }
     }
     if(fc.chatSprite){
       if(now > (fc.chatExpire || 0)){
@@ -3984,18 +3995,22 @@ async function searchFullSongOnArchive(query){
   }catch(e){}
   return null;
 }
-let radioActiveName = '', radioAudioEl = null, radioReqSeq = 0;
+let radioActiveName = '', myRadioCode = '', radioAudioEl = null, radioReqSeq = 0;
+const resolvedRadioUrlCache = {};
 function broadcastRadioSync(codeStr){
+  myRadioCode = codeStr || '';
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || 'Oyuncu';
   const id = 'rs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   processedCoopEvents.add(id);
-  const pkt = {type: 'radio_sync', id, user: myName, code: codeStr || '', ts: Date.now()};
+  const pkt = {type: 'radio_sync', id, user: myName, code: myRadioCode, ts: Date.now()};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   postToRelays(pkt, true);
+  broadcastCoopPos(true);
 }
 function stopCarRadio(fromSync){
   radioReqSeq++;
   radioActiveName = '';
+  if(!fromSync) myRadioCode = '';
   if(radioAudioEl){
     try{ radioAudioEl.pause(); radioAudioEl.src = ''; }catch(e){}
     radioAudioEl = null;
@@ -4003,7 +4018,7 @@ function stopCarRadio(fromSync){
   if($('radioYtWrap')){ $('radioYtWrap').innerHTML = ''; $('radioYtWrap').style.display = 'none'; }
   if($('radioBtn')) $('radioBtn').textContent = '📻 Radyo: Kapalı';
   if($('radioStatus')) $('radioStatus').textContent = 'Radyo kapalı.';
-  if(!fromSync && C.driving) broadcastRadioSync('');
+  if(!fromSync) broadcastRadioSync('');
 }
 function extractYouTubeId(str){
   const s = str.trim();
@@ -4011,52 +4026,15 @@ function extractYouTubeId(str){
   const m = s.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
   return m ? m[1] : null;
 }
-function startRealAudioStream(streamUrl, displayTitle, codeForSync, fromSync){
-  if(radioAudioEl){
-    try{ radioAudioEl.pause(); radioAudioEl.src = ''; }catch(e){}
-  }
-  radioActiveName = displayTitle.slice(0, 24);
-  radioAudioEl = new Audio(streamUrl);
-  radioAudioEl.crossOrigin = 'anonymous';
-  radioAudioEl.loop = true;
-  radioAudioEl.volume = 0.85;
-  radioAudioEl.play().then(() => {
-    if($('radioBtn')) $('radioBtn').textContent = `📻 ${radioActiveName}`;
-    if($('radioStatus')) $('radioStatus').textContent = `🎵 Çalıyor: ${displayTitle}`;
-    flash(`📻 Çalıyor: ${displayTitle}`, '#4ade80');
-  }).catch(() => {
-    if($('radioStatus')) $('radioStatus').textContent = `🎵 Hazır: ${displayTitle} (Tekrar ▶ Çal'a dokun)`;
-  });
-  if(!fromSync && C.driving) broadcastRadioSync(codeForSync);
-}
-async function playRadioByCode(rawCode, fromSync){
+async function resolveRadioStreamInfo(rawCode){
   const code = String(rawCode || '').trim();
-  if(!code){
-    if($('radioStatus')) $('radioStatus').textContent = 'Lütfen bir Roblox şarkı kodu veya şarkı adı yaz!';
-    return;
-  }
-  stopCarRadio(true);
-  const mySeq = ++radioReqSeq;
-  if($('radioStatus')) $('radioStatus').textContent = '⏳ Gerçek şarkı aranıyor ve yükleniyor...';
-  // 1) Doğrudan ses linki (.mp3 / .m4a / .ogg / .wav)
+  if(!code) return null;
+  if(resolvedRadioUrlCache[code]) return resolvedRadioUrlCache[code];
   if(/^https?:\/\/.+\.(mp3|m4a|ogg|wav)(\?.*)?$/i.test(code)){
-    startRealAudioStream(code, 'MP3/Ses Akışı', code, fromSync);
-    return;
+    const info = {url: code, title: 'MP3/Ses Akışı'};
+    resolvedRadioUrlCache[code] = info;
+    return info;
   }
-  // 2) YouTube linki veya 11 haneli YouTube video kodu
-  const ytId = extractYouTubeId(code);
-  if(ytId){
-    radioActiveName = 'YT:' + ytId.slice(0, 6);
-    if($('radioYtWrap')){
-      $('radioYtWrap').style.display = 'block';
-      $('radioYtWrap').innerHTML = `<iframe width="100%" height="90" src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}" frameborder="0" allow="autoplay; encrypted-media"></iframe>`;
-    }
-    if($('radioBtn')) $('radioBtn').textContent = `📻 ${radioActiveName}`;
-    if($('radioStatus')) $('radioStatus').textContent = `🎵 YouTube'dan çalıyor (${ytId})`;
-    if(!fromSync && C.driving) broadcastRadioSync(code);
-    return;
-  }
-  // 3) Bilinen Roblox ID ise hazır yüksek kaliteli gerçek sesini veya tam adını al
   let searchQuery = code;
   let knownTitle = '';
   if(ROBLOX_KNOWN_SONGS[code]){
@@ -4064,11 +4042,11 @@ async function playRadioByCode(rawCode, fromSync){
     searchQuery = k.q;
     knownTitle = k.title;
     if(k.url){
-      startRealAudioStream(k.url, k.title, code, fromSync);
-      return;
+      const info = {url: k.url, title: k.title};
+      resolvedRadioUrlCache[code] = info;
+      return info;
     }
   } else if(/^\d{5,15}$/.test(code)){
-    // Herhangi bir Roblox şarkı ID'si yazıldıysa Roblox katalogundan gerçek şarkı adını çek
     try{
       const r = await fetch(`https://economy.roproxy.com/v2/assets/${code}/details`);
       if(r.ok){
@@ -4083,33 +4061,130 @@ async function playRadioByCode(rawCode, fromSync){
       }
     }catch(e){}
   }
-  if(mySeq !== radioReqSeq) return;
-  // 4) Önce tam uzunlukta (kesilmeyen) MP3 kaydını bulup çal
   const fullSong = await searchFullSongOnArchive(searchQuery);
-  if(mySeq !== radioReqSeq) return;
   if(fullSong && fullSong.url){
-    startRealAudioStream(fullSong.url, fullSong.title, code, fromSync);
-    return;
+    resolvedRadioUrlCache[code] = fullSong;
+    return fullSong;
   }
-  // 5) Yedek olarak iTunes API üzerinden gerçek ses kaydını bulup çal
   try{
     const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&entity=song&limit=1`);
-    if(mySeq !== radioReqSeq) return;
     if(res.ok){
       const data = await res.json();
       if(data && data.results && data.results.length > 0 && data.results[0].previewUrl){
         const tr = data.results[0];
-        const fullTitle = `${tr.artistName} - ${tr.trackName}`;
-        startRealAudioStream(tr.previewUrl, fullTitle, code, fromSync);
-        return;
+        const info = {url: tr.previewUrl, title: `${tr.artistName} - ${tr.trackName}`};
+        resolvedRadioUrlCache[code] = info;
+        return info;
       }
     }
   }catch(e){}
-  if($('radioStatus')) $('radioStatus').textContent = `❌ "${knownTitle || code}" için ses bulunamadı. Başka kod veya şarkı adı dene!`;
+  return null;
+}
+function startRealAudioStream(streamUrl, displayTitle, codeForSync, fromSync){
+  if(radioAudioEl){
+    try{ radioAudioEl.pause(); radioAudioEl.src = ''; }catch(e){}
+  }
+  radioActiveName = displayTitle.slice(0, 24);
+  myRadioCode = codeForSync || '';
+  radioAudioEl = new Audio(streamUrl);
+  radioAudioEl.crossOrigin = 'anonymous';
+  radioAudioEl.loop = true;
+  radioAudioEl.volume = 0.85;
+  radioAudioEl.play().then(() => {
+    if($('radioBtn')) $('radioBtn').textContent = `📻 ${radioActiveName}`;
+    if($('radioStatus')) $('radioStatus').textContent = `🎵 Çalıyor: ${displayTitle}`;
+    flash(`📻 Çalıyor: ${displayTitle}`, '#4ade80');
+  }).catch(() => {
+    if($('radioStatus')) $('radioStatus').textContent = `🎵 Hazır: ${displayTitle} (Tekrar ▶ Çal'a dokun)`;
+  });
+  if(!fromSync) broadcastRadioSync(codeForSync);
+}
+async function playRadioByCode(rawCode, fromSync){
+  const code = String(rawCode || '').trim();
+  if(!code){
+    if($('radioStatus')) $('radioStatus').textContent = 'Lütfen bir Roblox şarkı kodu veya şarkı adı yaz!';
+    return;
+  }
+  stopCarRadio(true);
+  const mySeq = ++radioReqSeq;
+  if($('radioStatus')) $('radioStatus').textContent = '⏳ Gerçek şarkı aranıyor ve yükleniyor...';
+  const ytId = extractYouTubeId(code);
+  if(ytId){
+    radioActiveName = 'YT:' + ytId.slice(0, 6);
+    myRadioCode = code;
+    if($('radioYtWrap')){
+      $('radioYtWrap').style.display = 'block';
+      $('radioYtWrap').innerHTML = `<iframe width="100%" height="90" src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}" frameborder="0" allow="autoplay; encrypted-media"></iframe>`;
+    }
+    if($('radioBtn')) $('radioBtn').textContent = `📻 ${radioActiveName}`;
+    if($('radioStatus')) $('radioStatus').textContent = `🎵 YouTube'dan çalıyor (${ytId})`;
+    if(!fromSync) broadcastRadioSync(code);
+    return;
+  }
+  const info = await resolveRadioStreamInfo(code);
+  if(mySeq !== radioReqSeq) return;
+  if(info && info.url){
+    startRealAudioStream(info.url, info.title, code, fromSync);
+    return;
+  }
+  if($('radioStatus')) $('radioStatus').textContent = `❌ "${code}" için ses bulunamadı. Başka kod veya şarkı adı dene!`;
   flash('Şarkı bulunamadı, başka kod veya şarkı adı yaz!', '#f87171');
 }
+async function updatePeerCarRadio(fc, code){
+  if(!fc) return;
+  const c = String(code || '').trim();
+  fc.radioCode = c;
+  if(fc.radioEl){
+    try{ fc.radioEl.pause(); fc.radioEl.src = ''; }catch(e){}
+    fc.radioEl = null;
+  }
+  if(!c) return;
+  const reqId = (fc.radioReqId || 0) + 1;
+  fc.radioReqId = reqId;
+  const info = await resolveRadioStreamInfo(c);
+  if(fc.radioReqId !== reqId || fc.radioCode !== c || !info || !info.url) return;
+  const el = new Audio(info.url);
+  el.crossOrigin = 'anonymous';
+  el.loop = true;
+  el.volume = 0;
+  fc.radioEl = el;
+  el.play().catch(() => {});
+}
+function updateSpatialCarRadios(){
+  const ear = getMyWorldPos();
+  // 1) Kendi arabamızın radyosu: arabanın içindeyken tam ses, dışındayken arabadan uzaklaştıkça sesi azalır
+  if(radioAudioEl){
+    if(!S.car){
+      radioAudioEl.volume = 0;
+    } else if(C.driving){
+      radioAudioEl.volume = 0.85;
+    } else {
+      const dist = Math.hypot(ear.x - C.x, ear.z - C.z);
+      const maxDist = 42;
+      radioAudioEl.volume = Math.max(0, Math.min(0.85, (1 - dist / maxDist) * 0.85));
+    }
+  }
+  // 2) Arkadaşlarımızın arabalarından gelen radyo sesi: onların arabasına yaklaştıkça duyulur, uzaklaştıkça azalır
+  for(const k of Object.keys(roomPeers)){
+    const fc = roomPeers[k];
+    if(!fc || !fc.radioEl) continue;
+    if(fc.radioEl.paused && !escPaused){
+      fc.radioEl.play().catch(() => {});
+    }
+    if(!fc.carMesh){
+      fc.radioEl.volume = 0;
+    } else if(passengerOf === k){
+      fc.radioEl.volume = 0.85;
+    } else {
+      const dist = Math.hypot(ear.x - fc.cx, ear.z - fc.cz);
+      const maxDist = 42;
+      fc.radioEl.volume = Math.max(0, Math.min(0.85, (1 - dist / maxDist) * 0.85));
+    }
+  }
+}
 function openRadioModal(){
-  if(!C.driving && !passengerOf) return;
+  const nearMyCar = S.car && Math.hypot(P.x - C.x, P.z - C.z) < 5;
+  if(!C.driving && !passengerOf && !nearMyCar) return;
   if($('radioModal')) $('radioModal').style.display = 'flex';
   if($('radioCodeIn')) $('radioCodeIn').focus();
 }
@@ -4152,7 +4227,6 @@ function togglePassengerSeat(){
     const fc = roomPeers[passengerOf];
     if(fc){ P.x = fc.cx + 2.2; P.z = fc.cz; }
     passengerOf = null;
-    stopCarRadio();
     broadcastCoopPos(true);
     flash('🚪 Arkadaşının arabasından indin', '#7dd3fc');
     return;
@@ -5764,7 +5838,6 @@ $('carExit').onclick = () => {
   if(!C.driving || Math.abs(C.v) > 1) { flash('Önce yavaşla', '#f87171'); return; }
   C.driving = false; C.v = 0;
   stopEngine();
-  stopCarRadio();
   P.x = C.x + 2.2; P.z = C.z;
   P.yaw = -Math.PI / 2;
   broadcastCoopPos(true);
@@ -6453,7 +6526,8 @@ function frame(now){
   }
   disp('hazardBtn', C.driving ? 'block' : 'none');
   txt('hazardBtn', C.hazard ? "🚨 4'lüler: Açık" : "🚨 4'lüleri Yak");
-  disp('radioBtn', (C.driving || passengerOf) ? 'block' : 'none');
+  disp('radioBtn', (C.driving || passengerOf || nearCar) ? 'block' : 'none');
+  updateSpatialCarRadios();
   disp('raceBtn', (C.driving && Object.keys(roomPeers).length > 0 && !raceState.active) ? 'block' : 'none');
   if(raceState.active && raceState.go){
     const myZ = C.driving ? C.z : P.z;
@@ -7497,7 +7571,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-232101';
+const APP_VERSION = '2026-10-23-233304';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
