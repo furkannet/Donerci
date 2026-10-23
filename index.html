@@ -2560,7 +2560,7 @@ function makeNameSprite(text){
 }
 const knownPlayers = {}; // sunucudan / ağdan bilinen tüm gerçek oyuncular
 const lastAcctSaveTs = {};
-function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs){
+function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs, extra){
   if(!user) return;
   const k = String(user).toLowerCase();
   const prev = onlineFriends[k];
@@ -2579,14 +2579,28 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs){
       try{ localStorage.setItem('donerAcct_' + k, JSON.stringify(st)); }catch(e){}
     }
   }
+  if(extra && isNewerPos && st){
+    if(extra.car) st.car = extra.car;
+    if(extra.mods) st.mods = Object.assign({}, st.mods, extra.mods);
+    if(extra.plate) st.plate = extra.plate;
+  }
   const prevTs = (prev && prev.ts) || 0;
   const newTs = isRecent ? Date.now() : prevTs;
+  const ex = extra || {};
   onlineFriends[k] = {
     user,
     state: st,
     x: (isNewerPos && typeof x === 'number') ? x : ((prev && typeof prev.x === 'number') ? prev.x : (D.x - 2.0)),
     z: (isNewerPos && typeof z === 'number') ? z : ((prev && typeof prev.z === 'number') ? prev.z : (D.z - 1.2)),
     yaw: (isNewerPos && typeof yaw === 'number') ? yaw : ((prev && typeof prev.yaw === 'number') ? prev.yaw : 0),
+    driving: (isNewerPos && typeof ex.driving === 'boolean') ? ex.driving : !!(prev && prev.driving),
+    car: (isNewerPos && ex.car) ? ex.car : ((st && st.car) || (prev && prev.car) || null),
+    cx: (isNewerPos && typeof ex.cx === 'number') ? ex.cx : ((prev && typeof prev.cx === 'number') ? prev.cx : -6.5),
+    cz: (isNewerPos && typeof ex.cz === 'number') ? ex.cz : ((prev && typeof prev.cz === 'number') ? prev.cz : -24),
+    ch: (isNewerPos && typeof ex.ch === 'number') ? ex.ch : ((prev && typeof prev.ch === 'number') ? prev.ch : 0),
+    cslip: (isNewerPos && typeof ex.cslip === 'number') ? ex.cslip : ((prev && typeof prev.cslip === 'number') ? prev.cslip : 0),
+    mods: (isNewerPos && ex.mods) ? ex.mods : ((st && st.mods) || (prev && prev.mods) || {}),
+    plate: (isNewerPos && ex.plate) ? ex.plate : ((st && st.plate) || (prev && prev.plate) || '06 ABC 123'),
     msgTs: (isNewerPos && incomingTs) ? incomingTs : ((prev && prev.msgTs) || 0),
     ts: newTs
   };
@@ -2659,19 +2673,62 @@ function getOrCreateFriendAcct(name){
   st.settings.name = name;
   return st;
 }
+function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
+  const def = CARS.find(c => c.id === carId);
+  if(!def) return null;
+  const mods = modsObj || {};
+  const mesh = car(mods.paint || def.color, def.type);
+  if(mods.sprey){
+    const stripeMat = M(0x111111);
+    [-0.35, 0.35].forEach(x => {
+      const s = new THREE.Mesh(B(0.2, 0.02, 4.2), stripeMat);
+      s.position.set(x, 0.96, 0);
+      mesh.add(s);
+    });
+  }
+  if(mods.jant){
+    const gold = M(0xd4af37);
+    mesh.children.forEach(w => { if(w.name === 'wheel') w.children.forEach(r => { if(r.material === RIM_M) r.material = gold; }); });
+  }
+  if(mods.far){
+    const xenon = new THREE.MeshBasicMaterial({color: 0x9fe8ff});
+    mesh.children.forEach(ch => { if(ch.material === HEAD_M) ch.material = xenon; });
+  }
+  if(typeof makeCarPlate === 'function'){
+    const pl = makeCarPlate(plateStr || '06 ABC 123');
+    mesh.children.forEach(ch => { if(ch.material === PLATE_M) ch.material = pl; });
+  }
+  if(mods.spoiler){
+    const sp = new THREE.Mesh(B(1.8, 0.08, 0.3), M(0x111111));
+    sp.position.set(0, 1.25, 2.0);
+    mesh.add(sp);
+    [-0.7, 0.7].forEach(x => {
+      const st = new THREE.Mesh(B(0.06, 0.2, 0.06), M(0x111111));
+      st.position.set(x, 1.1, 2.0);
+      mesh.add(st);
+    });
+  }
+  if(mods.neon){
+    const n = new THREE.Mesh(B(1.9, 0.02, 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
+    n.position.set(0, 0.2, 0);
+    mesh.add(n);
+  }
+  if(ownerName){
+    const sp = makeNameSprite('🚗 ' + ownerName);
+    sp.position.y = 2.0;
+    mesh.add(sp);
+  }
+  return mesh;
+}
 function spawnFriendMapCar(st){
   if(friendMapCarMesh){ scene.remove(friendMapCarMesh); friendMapCarMesh = null; }
-  if(!st || !st.car) return;
-  const def = CARS.find(c => c.id === st.car);
-  if(!def) return;
-  friendMapCarMesh = car((st.mods && st.mods.paint) || def.color, def.type);
-  friendMapCarMesh.position.set(-6.5, 0, -24);
-  friendMapCarMesh.rotation.y = Math.PI;
-  scene.add(friendMapCarMesh);
 }
 function spawnRoomPeer(name, startX, startZ, startYaw){
   const k = name.toLowerCase();
-  if(roomPeers[k] && roomPeers[k].g) scene.remove(roomPeers[k].g);
+  if(roomPeers[k]){
+    if(roomPeers[k].g) scene.remove(roomPeers[k].g);
+    if(roomPeers[k].carMesh) scene.remove(roomPeers[k].carMesh);
+  }
   const acct = getOrCreateFriendAcct(name);
   const lk = acct.look || DEF.look;
   const g = human(lk.shirt, lk.pants, lk.skin, lk.hair);
@@ -2681,8 +2738,13 @@ function spawnRoomPeer(name, startX, startZ, startYaw){
   const fz = typeof startZ === 'number' ? startZ : (D.z - 1.2);
   g.position.set(fx, 0, fz);
   scene.add(g);
+  const on = onlineFriends[k];
+  const initCx = (on && typeof on.cx === 'number') ? on.cx : -6.5;
+  const initCz = (on && typeof on.cz === 'number') ? on.cz : -24;
+  const initCh = (on && typeof on.ch === 'number') ? on.ch : 0;
   const peer = {
     name, g, x: fx, z: fz, tx: fx, tz: fz, yaw: (startYaw || 0) + Math.PI, targetYaw: startYaw || 0, ph: 0,
+    carMesh: null, carSignature: '', cx: initCx, cz: initCz, tcx: initCx, tcz: initCz, ch: initCh, tch: initCh, cslip: 0,
     liveTs: Date.now(),
     legL: g.getObjectByName('legL'), legR: g.getObjectByName('legR'),
     armL: g.getObjectByName('armL'), armR: g.getObjectByName('armR')
@@ -2696,13 +2758,17 @@ function removeRoomPeer(name){
   const p = roomPeers[k];
   if(p){
     if(p.g) scene.remove(p.g);
+    if(p.carMesh) scene.remove(p.carMesh);
     delete roomPeers[k];
   }
   if(friendComp && friendComp.name.toLowerCase() === k) friendComp = null;
 }
 function clearAllRoomPeers(){
   Object.keys(roomPeers).forEach(k => {
-    if(roomPeers[k] && roomPeers[k].g) scene.remove(roomPeers[k].g);
+    if(roomPeers[k]){
+      if(roomPeers[k].g) scene.remove(roomPeers[k].g);
+      if(roomPeers[k].carMesh) scene.remove(roomPeers[k].carMesh);
+    }
     delete roomPeers[k];
   });
   friendComp = null;
@@ -2784,10 +2850,14 @@ function broadcastCoopPos(force){
   const stVal = Number(shiftT.toFixed(1));
   const nmVal = !!nightMode;
   const wtVal = weather;
-  // Yürürken anında (~80ms) WebSocket üzerinden gönder ki karşıda hiç beklemeden yürüsün
+  const cxVal = Number(C.x.toFixed(2));
+  const czVal = Number(C.z.toFixed(2));
+  const chVal = Number(C.h.toFixed(2));
+  const cslipVal = Number((C.slip || 0).toFixed(2));
+  // Yürürken ve araba sürerken anında (~80ms) WebSocket üzerinden gönder ki karşıda hiç beklemeden görünsün
   const pkt = force
-    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
-    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, st: stVal, nm: nmVal, wt: wtVal, ts: now};
+    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
+    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const minInterval = moved ? 80 : 2500;
   if(!force && now - lastCoopBroadcast < minInterval) return;
@@ -2812,7 +2882,7 @@ function handleIncomingCoopMsg(msg){
     return;
   }
   const wasOnline = isFriendActive(msg.user);
-  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true, msg.ts);
+  registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true, msg.ts, msg);
   if(msg.type === 'ping' || msg.type === 'room_join'){
     broadcastCoopPos(true);
   }
@@ -2902,7 +2972,7 @@ async function pollOnlineStatus(forceFull){
               if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
               if(msg.user){
                 const serverMs = outer.time ? outer.time * 1000 : 0;
-                registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, false, msg.ts || serverMs);
+                registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, false, msg.ts || serverMs, msg);
               }
             }
           }catch(e){}
@@ -2935,7 +3005,7 @@ async function pollOnlineStatus(forceFull){
       });
     }
     Object.values(latestByUser).forEach(m => {
-      registerKnownPlayer(m.user, m.state, m.x, m.z, m.yaw, true, m.ts || m._ord);
+      registerKnownPlayer(m.user, m.state, m.x, m.z, m.yaw, true, m.ts || m._ord, m);
       handleIncomingCoopMsg(m);
     });
     if(escPaused) renderFriends();
@@ -3127,6 +3197,54 @@ function updateFriendCompanion(dt){
     }
     fc.g.position.set(fc.x, 0, fc.z);
     fc.g.rotation.y = fc.yaw;
+    // Diğer oyuncunun arabası: hem park halindeyken hem de sürerken diğer ekranda görünsün
+    const on = onlineFriends[k];
+    const peerCarId = (on && on.car) || (on && on.state && on.state.car);
+    const peerMods = (on && on.mods) || (on && on.state && on.state.mods) || {};
+    const peerPlate = (on && on.plate) || (on && on.state && on.state.plate) || '06 ABC 123';
+    const isDrivingCar = !!(on && on.driving);
+    fc.g.visible = !isDrivingCar;
+    if(peerCarId){
+      const sig = `${peerCarId}|${peerMods.paint || ''}|${!!peerMods.spoiler}|${!!peerMods.neon}|${!!peerMods.jant}|${!!peerMods.far}|${!!peerMods.sprey}|${peerPlate}`;
+      if(!fc.carMesh || fc.carSignature !== sig){
+        if(fc.carMesh) scene.remove(fc.carMesh);
+        fc.carMesh = buildPeerCarMesh(peerCarId, peerMods, peerPlate, fc.name);
+        fc.carSignature = sig;
+        if(fc.carMesh){
+          fc.cx = (on && typeof on.cx === 'number') ? on.cx : -6.5;
+          fc.cz = (on && typeof on.cz === 'number') ? on.cz : -24;
+          fc.ch = (on && typeof on.ch === 'number') ? on.ch : 0;
+          fc.carMesh.position.set(fc.cx, 0, fc.cz);
+          fc.carMesh.rotation.y = fc.ch + Math.PI;
+          scene.add(fc.carMesh);
+        }
+      }
+      if(fc.carMesh){
+        const targetCx = (on && typeof on.cx === 'number') ? on.cx : (isDrivingCar ? fc.tx : fc.cx);
+        const targetCz = (on && typeof on.cz === 'number') ? on.cz : (isDrivingCar ? fc.tz : fc.cz);
+        const targetCh = (on && typeof on.ch === 'number') ? on.ch : fc.ch;
+        const targetSlip = (on && typeof on.cslip === 'number') ? on.cslip : 0;
+        const cdx = targetCx - fc.cx, cdz = targetCz - fc.cz;
+        const cdist = Math.hypot(cdx, cdz);
+        if(cdist > 0.01){
+          const carSp = Math.min(28.0, Math.max(9.0, cdist * 8.5));
+          const cStep = Math.min(cdist, carSp * dt);
+          fc.cx += (cdx / cdist) * cStep;
+          fc.cz += (cdz / cdist) * cStep;
+        }
+        let dCh = targetCh - fc.ch;
+        while(dCh > Math.PI) dCh -= Math.PI * 2;
+        while(dCh < -Math.PI) dCh += Math.PI * 2;
+        fc.ch += dCh * Math.min(1, dt * 14);
+        fc.cslip = (fc.cslip || 0) + (targetSlip - (fc.cslip || 0)) * Math.min(1, dt * 10);
+        fc.carMesh.position.set(fc.cx, 0, fc.cz);
+        fc.carMesh.rotation.y = fc.ch + Math.PI + (fc.cslip || 0);
+      }
+    } else if(fc.carMesh){
+      scene.remove(fc.carMesh);
+      fc.carMesh = null;
+      fc.carSignature = '';
+    }
   }
 }
 // arkadaş listesi (yalnızca gerçek ve aktif arkadaşlarla oynanabilir)
@@ -4795,6 +4913,7 @@ function renderMods(){
       S.money -= m.price;
       if(m.paint) S.mods.paint = m.paint; else S.mods[m.id] = true;
       spawnOwnedCar();
+      broadcastCoopPos(true);
       beep(700, 0.1);
       flash(`${m.name} takıldı`, '#4ade80');
       renderMods(); renderAll();
@@ -4830,6 +4949,7 @@ function renderGallery(){
       C.h = 0;
       S.mods.paint = null; // yeni arabanın kendi rengi olsun
       spawnOwnedCar();
+      broadcastCoopPos(true);
       beep(700, 0.1);
       flash(`${c.name} alındı, sokağa park edildi`, '#4ade80');
       renderGallery(); renderAll();
@@ -4842,6 +4962,7 @@ $('carBtn').onclick = () => {
   if(!active() || !S.car) return;
   C.driving = true; C.v = 0;
   startEngine();
+  broadcastCoopPos(true);
   flash('Arabaya bindin', '#7dd3fc');
   renderAll();
 };
@@ -4851,6 +4972,7 @@ $('carExit').onclick = () => {
   stopEngine();
   P.x = C.x + 2.2; P.z = C.z;
   P.yaw = -Math.PI / 2;
+  broadcastCoopPos(true);
   flash('Arabadan indin', '#7dd3fc');
   renderAll();
 };
@@ -6420,7 +6542,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-195005';
+const APP_VERSION = '2026-10-23-195802';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
