@@ -6402,25 +6402,49 @@ gunDealer.position.set(-16, 0, -30);
 gunDealer.rotation.y = Math.PI / 2;
 scene.add(gunDealer);
 
-// teröristler: siyah giyimli, bereli; parkta doğar, dönercinin kasasını soymaya gelir
+// teröristler: siyah giyimli, bereli; farklı rastgele bölgelerde birbirinden mesafeli doğar, dönercinin kasasını soymaya gelir
 const terrorists = [];
-const TERROR_HOME = {x: -16, z: -30};
+const TERROR_SPAWNS = [
+  {x: -18, z: -34}, {x: -26, z: -24}, {x: -14, z: -48},
+  {x: -24, z: -44}, {x: -10, z: -62}, {x: -28, z: -14},
+  {x: -6, z: -72},  {x: 6, z: -65},   {x: -20, z: -18}
+];
+const HP_BG_MAT = new THREE.MeshBasicMaterial({color: 0x220808});
+const HP_FG_MAT = new THREE.MeshBasicMaterial({color: 0xff2e2e});
+const HP_WARN_MAT = new THREE.MeshBasicMaterial({color: 0xffa500});
+function pickTerrorSpawnPos(){
+  for(let tries = 0; tries < 25; tries++){
+    const sp = pick(TERROR_SPAWNS);
+    const sx = sp.x + (Math.random() - 0.5) * 8;
+    const sz = sp.z + (Math.random() - 0.5) * 8;
+    const tooClose = terrorists.some(t => !t.dead && Math.hypot(t.g.position.x - sx, t.g.position.z - sz) < 4.5);
+    if(!tooClose) return {x: sx, z: sz};
+  }
+  const sp = pick(TERROR_SPAWNS);
+  return {x: sp.x + (Math.random() - 0.5) * 12, z: sp.z + (Math.random() - 0.5) * 12};
+}
 function spawnTerrorist(){
   const g = human(0x161616, 0x0d0d0d, pick(SKINS), pick(HAIRS));
   // maske: yüzü tamamen kapatan siyah kukuleta, gözler için iki dar yarık
   const mask = addTo(g, new THREE.SphereGeometry(0.205, 12, 10), M(0x0b0b0b), 0, 1.85, 0);
   mask.scale.set(1, 1.1, 0.98);
   [-0.07, 0.07].forEach(x => addTo(g, B(0.06, 0.025, 0.02), M(0xc9d1d9), x, 1.88, 0.2));
+  // Kafasının üstünde kırmızı can çubuğu
+  const hpBg = addTo(g, B(0.56, 0.07, 0.03), HP_BG_MAT, 0, 2.24, 0);
+  const hpBar = new THREE.Mesh(B(0.52, 0.05, 0.04), HP_FG_MAT);
+  hpBar.position.set(0, 2.24, 0);
+  g.add(hpBar);
   g.scale.set(2.2, 2.2, 2.2); // kocaman görünsün
-  // dalga topluca çıkar: hepsi aynı noktanın yakınında doğar
-  g.position.set(TERROR_HOME.x + (Math.random() - 0.5) * 1.5, 0, TERROR_HOME.z + (Math.random() - 0.5) * 1.5);
+  const pos = pickTerrorSpawnPos();
+  g.position.set(pos.x, 0, pos.z);
   scene.add(g);
   // silahı sağ elinde
   const gun = makeHeldGun('uzi');
   gun.position.set(0, -0.55, 0.15);
   gun.rotation.x = -Math.PI / 2;
   g.getObjectByName('armR').add(gun);
-  terrorists.push({g, dead: false, deadT: 0, hp: 2, ph: Math.random() * 6});
+  const spd = 1.45 + Math.random() * 0.45;
+  terrorists.push({g, dead: false, deadT: 0, hp: 2, maxHp: 2, hpBar, hpBg, spd, flinchT: 0, ph: Math.random() * 6});
 }
 
 // silah ve envanter
@@ -6627,13 +6651,27 @@ function spendAmmo(){
   return w;
 }
 // terörist isabet alır: iki vuruşta ölür, ölünce 200₺
-function hitTerrorist(t){
-  t.hp--;
+function hitTerrorist(t, instantKill, customMsg){
+  if(t.dead) return;
+  t.hp = instantKill ? 0 : (t.hp - 1);
+  t.flinchT = 0.25;
+  if(t.hpBar){
+    const ratio = Math.max(0, t.hp / (t.maxHp || 2));
+    t.hpBar.scale.x = Math.max(0.01, ratio);
+    t.hpBar.position.x = -(1 - ratio) * 0.26;
+    t.hpBar.material = ratio <= 0.5 ? HP_WARN_MAT : HP_FG_MAT;
+  }
+  const dx = t.g.position.x - D.x, dz = t.g.position.z - D.z;
+  const dist = Math.hypot(dx, dz) || 1;
+  t.g.position.x += (dx / dist) * 0.9;
+  t.g.position.z += (dz / dist) * 0.9;
   if(t.hp > 0){ flash('Terörist vuruldu, bir vuruş daha!', '#ffd54a'); return; }
   t.dead = true; t.deadT = 0;
+  if(t.hpBar) t.hpBar.visible = false;
+  if(t.hpBg) t.hpBg.visible = false;
   S.money += 200;
   save();
-  flash('Terörist öldü! +200₺', '#4ade80');
+  flash(customMsg || 'Terörist öldü! +200₺', '#4ade80');
   renderAll();
 }
 // dokunulan terörist: menzilde ise ateş et
@@ -6725,10 +6763,21 @@ const terrorLabel = document.createElement('div');
 terrorLabel.style.cssText = 'position:fixed;top:max(40px,calc(env(safe-area-inset-top) + 36px));left:50%;transform:translateX(-50%);z-index:3;color:#ff6b6b;font-weight:700;font-size:11px;white-space:nowrap;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:6px;pointer-events:none';
 terrorLabel.id = 'terror';
 document.body.appendChild(terrorLabel);
+let guardShootCD = 0;
 function terroristUpdate(){
   const now = performance.now();
   const dt = Math.min(0.1, (now - terrorLast) / 1000);
   terrorLast = now;
+  guardShootCD = Math.max(0, guardShootCD - dt);
+  // Güvenlik görevlisi varsa yaklaşan teröristlere otomatik ateş eder
+  if(S.mk && S.mk.guard && guardShootCD <= 0){
+    const nearT = terrorists.find(t => !t.dead && Math.hypot(t.g.position.x - 6.6, t.g.position.z - 2.2) < 16);
+    if(nearT){
+      guardShootCD = 1.6;
+      gunshotSound('tabanca');
+      hitTerrorist(nearT, false, '👮 Güvenlik teröristi vurdu! +200₺');
+    }
+  }
   for(let i = terrorists.length - 1; i >= 0; i--){
     const t = terrorists[i];
     if(t.dead){
@@ -6737,6 +6786,13 @@ function terroristUpdate(){
       if(t.deadT > 3){ scene.remove(t.g); terrorists.splice(i, 1); }
       continue;
     }
+    // Arabayla çarpınca teröristi ezme
+    if(C.driving && Math.abs(C.v) > 2.2 && Math.hypot(C.x - t.g.position.x, C.z - t.g.position.z) < 2.3){
+      smashSound();
+      hitTerrorist(t, true, '🚗 Arabayla teröristi ezdin! +200₺');
+      continue;
+    }
+    if(t.flinchT > 0) t.flinchT = Math.max(0, t.flinchT - dt);
     // dönerciye doğru yürür; yaklaşınca kasayı soyar ve kaçar
     const dx = D.x - t.g.position.x, dz = D.z - t.g.position.z;
     const d = Math.hypot(dx, dz);
@@ -6751,8 +6807,30 @@ function terroristUpdate(){
       terrorists.splice(i, 1);
       continue;
     }
-    const step = Math.min(d, 1.6 * dt);
-    t.g.position.x += dx / d * step; t.g.position.z += dz / d * step;
+    // Birbirinin içine girmesinler: diğer teröristlerle aralarında mesafe korusun
+    let sepX = 0, sepZ = 0;
+    for(let j = 0; j < terrorists.length; j++){
+      if(i === j) continue;
+      const o = terrorists[j];
+      if(!o || o.dead) continue;
+      const odx = t.g.position.x - o.g.position.x;
+      const odz = t.g.position.z - o.g.position.z;
+      const od = Math.hypot(odx, odz);
+      const minSep = 3.2;
+      if(od > 0.001 && od < minSep){
+        const push = (minSep - od) / minSep;
+        sepX += (odx / od) * push * 2.4;
+        sepZ += (odz / od) * push * 2.4;
+      } else if(od <= 0.001){
+        sepX += (Math.random() - 0.5) * 2.0;
+        sepZ += (Math.random() - 0.5) * 2.0;
+      }
+    }
+    const moveSpd = (t.spd || 1.6) * (t.flinchT > 0 ? 0.3 : 1);
+    const vx = (dx / d) * moveSpd + sepX;
+    const vz = (dz / d) * moveSpd + sepZ;
+    t.g.position.x += vx * dt;
+    t.g.position.z += vz * dt;
     t.g.rotation.y = Math.atan2(dx, dz);
     // adım atma: bacaklar ve sol kol sallanır
     t.ph += dt * 8;
@@ -6886,7 +6964,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-213546';
+const APP_VERSION = '2026-10-23-215326';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
