@@ -3616,10 +3616,11 @@ function updateFriendCompanion(dt){
         const ts = fc.carMesh.userData && fc.carMesh.userData.trunkSys;
         if(ts){
           ts.speakerBox.visible = peerTrk;
-          ts.lidPivot.rotation.x = peerTrk ? -0.95 : 0;
+          ts.lidPivot.visible = peerTrk;
+          ts.lidPivot.rotation.x = peerTrk ? 0.92 : 0;
           if(peerTrk && peerRc && ts.cones){
-            const pulse = 1 + Math.abs(Math.sin(performance.now() * 0.018)) * 0.25;
-            ts.cones.forEach(c => c.scale.set(pulse, 1, pulse));
+            const pulse = 1 + Math.abs(Math.sin(performance.now() * 0.018)) * 0.32;
+            ts.cones.forEach(c => c.scale.set(pulse, pulse, 1));
           }
         }
       }
@@ -5420,35 +5421,59 @@ function popBurst(){
   }catch(e){}
 }
 // Bagaj içi dev bass hoparlör (ses pompası) ve açılıp kapanan bagaj kapağı
-const SPK_CONE_GEO = new THREE.CylinderGeometry(0.19, 0.13, 0.08, 10).rotateX(Math.PI / 2);
-const SPK_RING_GEO = new THREE.CylinderGeometry(0.22, 0.22, 0.04, 10).rotateX(Math.PI / 2);
+const SPK_CONE_GEO = new THREE.CylinderGeometry(0.18, 0.11, 0.09, 12).rotateX(Math.PI / 2);
+const SPK_RING_GEO = new THREE.CylinderGeometry(0.22, 0.22, 0.04, 12).rotateX(Math.PI / 2);
+const SPK_DUST_GEO = new THREE.SphereGeometry(0.06, 8, 6);
 function attachTrunkSoundSystem(carGroup, paintCol, isSport){
-  const baseY = isSport ? 0.56 : 0.78;
+  const deckY = isSport ? 0.72 : 0.95; // bagaj üst yüzeyi (gövdenin tam üstü, içinde kaybolmaz)
   const speakerBox = new THREE.Group();
-  speakerBox.position.set(0, baseY, 1.55);
-  const cab = new THREE.Mesh(B(1.36, 0.42, 0.52), M(0x16161a));
-  cab.position.set(0, 0.21, 0);
+  speakerBox.position.set(0, deckY, 1.55);
+  // Bagaj içi koyu halı zemin (açık bagaj boşluğu hissi verir)
+  const bayFloor = new THREE.Mesh(B(1.52, 0.04, 0.96), M(0x0a0a0d));
+  bayFloor.position.set(0, 0.02, 0);
+  speakerBox.add(bayFloor);
+  // Ana çiftli bass kabini (subwoofer kutusu)
+  const cab = new THREE.Mesh(B(1.42, 0.46, 0.56), M(0x18181f));
+  cab.position.set(0, 0.25, -0.06);
   speakerBox.add(cab);
-  const neonBar = new THREE.Mesh(B(1.30, 0.05, 0.04), new THREE.MeshBasicMaterial({color: 0xc084fc}));
-  neonBar.position.set(0, 0.39, 0.26);
-  speakerBox.add(neonBar);
+  // Üst ve alt parlak neon LED şeritler
+  const neonTop = new THREE.Mesh(B(1.36, 0.04, 0.04), new THREE.MeshBasicMaterial({color: 0xc084fc}));
+  neonTop.position.set(0, 0.45, 0.23);
+  speakerBox.add(neonTop);
+  const neonBot = new THREE.Mesh(B(1.36, 0.04, 0.04), new THREE.MeshBasicMaterial({color: 0x38bdf8}));
+  neonBot.position.set(0, 0.06, 0.23);
+  speakerBox.add(neonBot);
+  // Ortada anfi (amplifier) kutusu
+  const amp = new THREE.Mesh(B(0.24, 0.28, 0.05), M(0x9ca3af));
+  amp.position.set(0, 0.25, 0.23);
+  speakerBox.add(amp);
   const cones = [];
-  [-0.36, 0.36].forEach(x => {
-    const ring = new THREE.Mesh(SPK_RING_GEO, M(0x38bdf8));
-    ring.position.set(x, 0.20, 0.26);
+  [-0.42, 0.42].forEach(x => {
+    const ring = new THREE.Mesh(SPK_RING_GEO, new THREE.MeshBasicMaterial({color: 0x38bdf8}));
+    ring.position.set(x, 0.25, 0.23);
     speakerBox.add(ring);
-    const cone = new THREE.Mesh(SPK_CONE_GEO, M(0x0b0b0e));
-    cone.position.set(x, 0.20, 0.28);
-    speakerBox.add(cone);
-    cones.push(cone);
+    const coneGroup = new THREE.Group();
+    coneGroup.position.set(x, 0.25, 0.25);
+    const cone = new THREE.Mesh(SPK_CONE_GEO, M(0x0d0d12));
+    coneGroup.add(cone);
+    const dust = new THREE.Mesh(SPK_DUST_GEO, new THREE.MeshBasicMaterial({color: 0xf43f5e}));
+    dust.position.set(0, 0, 0.03);
+    coneGroup.add(dust);
+    speakerBox.add(coneGroup);
+    cones.push(coneGroup);
   });
   speakerBox.visible = false;
   carGroup.add(speakerBox);
+  // Bagaj kapağı: menteşesi arka cama yakın (z=1.08), açılınca (+0.92 rad) arkadan yukarı doğru kalkar!
   const lidPivot = new THREE.Group();
-  lidPivot.position.set(0, baseY + 0.18, 1.15);
-  const lidMesh = new THREE.Mesh(B(1.48, 0.05, 0.88), M(paintCol));
-  lidMesh.position.set(0, 0, 0.44);
+  lidPivot.position.set(0, deckY + 0.03, 1.08);
+  const lidMesh = new THREE.Mesh(B(1.54, 0.05, 0.98), M(paintCol));
+  lidMesh.position.set(0, 0, 0.49);
   lidPivot.add(lidMesh);
+  const lidInner = new THREE.Mesh(B(1.44, 0.02, 0.88), M(0x15151a));
+  lidInner.position.set(0, -0.025, 0.49);
+  lidPivot.add(lidInner);
+  lidPivot.visible = false;
   carGroup.add(lidPivot);
   return {speakerBox, lidPivot, cones};
 }
@@ -5540,7 +5565,8 @@ function spawnOwnedCar(){
   if(S.mods.ses){
     C.trunkSys = attachTrunkSoundSystem(ownedCarMesh, S.mods.paint || def.color, isSport);
     C.trunkSys.speakerBox.visible = !!C.trunkOpen;
-    C.trunkSys.lidPivot.rotation.x = C.trunkOpen ? -0.95 : 0;
+    C.trunkSys.lidPivot.visible = !!C.trunkOpen;
+    C.trunkSys.lidPivot.rotation.x = C.trunkOpen ? 0.92 : 0;
   } else {
     C.trunkSys = null;
     C.trunkOpen = false;
@@ -5908,7 +5934,8 @@ function toggleCarTrunk(){
   C.trunkOpen = !C.trunkOpen;
   if(C.trunkSys){
     C.trunkSys.speakerBox.visible = C.trunkOpen;
-    C.trunkSys.lidPivot.rotation.x = C.trunkOpen ? -0.95 : 0;
+    C.trunkSys.lidPivot.visible = C.trunkOpen;
+    C.trunkSys.lidPivot.rotation.x = C.trunkOpen ? 0.92 : 0;
   }
   if($('trunkBtn')) $('trunkBtn').textContent = C.trunkOpen ? '🔊 Bagaj: Açık' : '🔊 Bagaj & Hoparlör Aç';
   broadcastCoopPos(true);
@@ -6608,8 +6635,8 @@ function frame(now){
   disp('trunkBtn', showTrunkBtn ? 'block' : 'none');
   if(showTrunkBtn) txt('trunkBtn', C.trunkOpen ? '🔊 Bagaj: Açık' : '🔊 Bagaj & Hoparlör Aç');
   if(C.trunkSys && C.trunkOpen && myRadioCode && C.trunkSys.cones){
-    const pulse = 1 + Math.abs(Math.sin(performance.now() * 0.018)) * 0.25;
-    C.trunkSys.cones.forEach(c => c.scale.set(pulse, 1, pulse));
+    const pulse = 1 + Math.abs(Math.sin(performance.now() * 0.018)) * 0.32;
+    C.trunkSys.cones.forEach(c => c.scale.set(pulse, pulse, 1));
   }
   updateSpatialCarRadios();
   disp('raceBtn', (C.driving && Object.keys(roomPeers).length > 0 && !raceState.active) ? 'block' : 'none');
@@ -7655,7 +7682,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-23-235308';
+const APP_VERSION = '2026-10-24-000356';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
