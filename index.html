@@ -2580,7 +2580,7 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs){
     }
   }
   const prevTs = (prev && prev.ts) || 0;
-  const newTs = isRecent ? Date.now() : (prevTs || Date.now());
+  const newTs = isRecent ? Date.now() : prevTs;
   onlineFriends[k] = {
     user,
     state: st,
@@ -2801,6 +2801,16 @@ function handleIncomingCoopMsg(msg){
   const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
   if(myName && msg.user.toLowerCase() === myName.toLowerCase()) return;
   const k = String(msg.user).toLowerCase();
+  if(msg.type === 'leave'){
+    if(onlineFriends[k]) onlineFriends[k].ts = 0;
+    if(roomPeers[k]){
+      removeRoomPeer(msg.user);
+      renderAll();
+    }
+    if(escPaused) renderFriends();
+    if($('leadModal') && $('leadModal').style.display === 'flex') renderLeaderboard();
+    return;
+  }
   const wasOnline = isFriendActive(msg.user);
   registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, true, msg.ts);
   if(msg.type === 'ping' || msg.type === 'room_join'){
@@ -2876,9 +2886,30 @@ async function pollOnlineStatus(forceFull){
   if(pollInFlight) return;
   pollInFlight = true;
   try{
-    const sinceParam = (!initialHistoryLoaded || forceFull) ? '1h' : '15s';
-    initialHistoryLoaded = true;
-    const resList = await Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=' + sinceParam).catch(() => null)));
+    if(!initialHistoryLoaded || forceFull){
+      initialHistoryLoaded = true;
+      const resHist = await Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=24h').catch(() => null)));
+      for(const r of resHist){
+        if(!r || !r.ok) continue;
+        const text = await r.text();
+        text.split('\n').forEach(line => {
+          if(!line.trim()) return;
+          try{
+            const outer = JSON.parse(line);
+            if(outer && outer.message){
+              const msg = JSON.parse(outer.message);
+              if(!msg) return;
+              if(msg.type === 'friend_add' || msg.type === 'friend_del') handleFriendEvent(msg);
+              if(msg.user){
+                const serverMs = outer.time ? outer.time * 1000 : 0;
+                registerKnownPlayer(msg.user, msg.state, msg.x, msg.z, msg.yaw, false, msg.ts || serverMs);
+              }
+            }
+          }catch(e){}
+        });
+      }
+    }
+    const resList = await Promise.all(NTFY_RELAYS.map(u => fetch(u + '/json?poll=1&since=15s').catch(() => null)));
     const latestByUser = {};
     for(const r of resList){
       if(!r || !r.ok) continue;
@@ -3019,13 +3050,22 @@ function connectOnlineWS(){
   setTimeout(() => broadcastCoopPos(true), 200);
   window.addEventListener('focus', () => { broadcastCoopPos(true); pollOnlineStatus(false); });
   document.addEventListener('visibilitychange', () => { if(!document.hidden){ broadcastCoopPos(true); pollOnlineStatus(false); } });
+  const sendLeaveMsg = () => {
+    const myName = (S.settings && S.settings.name) || (getProfile() && getProfile().user) || '';
+    if(!myName) return;
+    const pkt = {type:'leave', user:myName, ts:Date.now()};
+    mqttPublish(pkt);
+    try{ if(coopChan) coopChan.postMessage(pkt); }catch(e){}
+  };
+  window.addEventListener('pagehide', sendLeaveMsg);
+  window.addEventListener('beforeunload', sendLeaveMsg);
 })();
 let lastPeerAutoCheck = 0;
 function updateFriendCompanion(dt){
   const now = Date.now();
   if(now - lastPeerAutoCheck > 1500){
     lastPeerAutoCheck = now;
-    if(activeFriendAcct && !roomPeers[activeFriendAcct.toLowerCase()]){
+    if(activeFriendAcct && !roomPeers[activeFriendAcct.toLowerCase()] && isFriendActive(activeFriendAcct)){
       spawnFriendCompanion(activeFriendAcct);
     }
     // Arkadaş listemizdeki aktif/çevrimiçi oyuncuları da haritada otomatik göster
@@ -3048,8 +3088,8 @@ function updateFriendCompanion(dt){
       if(typeof onlineFriends[k].z === 'number') fc.tz = onlineFriends[k].z;
       if(typeof onlineFriends[k].yaw === 'number') fc.targetYaw = onlineFriends[k].yaw;
     }
-    // Uzun süre bağlantı kesilirse ve arkadaşımız değilse kaldır
-    if((!activeFriendAcct || activeFriendAcct.toLowerCase() !== k) && (now - fc.liveTs > 70000) && !onlineFriends[k]){
+    // Oyuncu oyundan çıktıysa (20 saniyedir çevrimiçi değilse) haritadan kaldır
+    if(!isFriendActive(fc.name) && (now - fc.liveTs > 22000)){
       removeRoomPeer(fc.name);
       renderAll();
       continue;
@@ -3093,16 +3133,7 @@ function updateFriendCompanion(dt){
 function getFriends(){ try{ return JSON.parse(localStorage.getItem('donerFriends') || '[]'); }catch(e){ return []; } }
 function isFriendActive(name){
   const k = name.toLowerCase();
-  if(onlineFriends[k] && onlineFriends[k].ts && (Date.now() - onlineFriends[k].ts < 600000)) return true;
-  if(knownPlayers[k]) return true;
-  try{
-    const saved = localStorage.getItem('donerAcct_' + k);
-    if(saved){
-      const parsed = JSON.parse(saved);
-      if(parsed && parsed.realAccount === true) return true;
-    }
-  }catch(e){}
-  return false;
+  return !!(onlineFriends[k] && onlineFriends[k].ts && (Date.now() - onlineFriends[k].ts < 20000));
 }
 function buildLeaderboardEntries(){
   const map = {};
@@ -6389,7 +6420,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-22-231857';
+const APP_VERSION = '2026-10-23-195005';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
