@@ -227,7 +227,7 @@ button small{font-size:9px;margin-top:0}
 <div id="rightPad">
 <button id="pay" style="display:none">💵 Maaş Öde</button>
 <button id="carBtn" style="display:none">🚗 Bin (E)</button>
-<button id="motoBtn" style="display:none;background:#991b1b;border-color:#f87171;font-weight:700">🏍️ Motora Bin (E)</button>
+
 <button id="carExit" style="display:none">🚪 İn (E)</button>
 <button id="passBtn" style="display:none;background:#1e3a52;border-color:#7dd3fc;font-weight:700">💺 Yolcu Bin</button>
 <button id="hazardBtn" style="display:none;background:#7c4a12;border-color:#ffa500;font-weight:700">🚨 4'lüleri Yak</button>
@@ -600,7 +600,6 @@ const DEF = {
   look:{shirt:'#3a6ea5', pants:'#2a2a2a', skin:'#f1c27d', hair:'#1b1b1b'},
   mods:{paint:null, spoiler:false, turbo:false, neon:false, ses:false},
   car:null,
-  moto:null,
   bank:0,
   loan:0,
   seen:false
@@ -622,11 +621,6 @@ function normalizeState(o){
   }
   if(!Array.isArray(out.inv) || out.inv.length !== 10) out.inv = Array(10).fill(null);
   if(!('hand' in out)) out.hand = null;
-  // Eğer eski kayıtta S.car bir motorsa, S.moto'ya taşı
-  if(out.car && ['scooter', 'yaris_motor', 'super_motor'].includes(out.car)){
-    if(!out.moto) out.moto = out.car;
-    out.car = null;
-  }
   return out;
 }
 function load(){
@@ -746,12 +740,14 @@ let tamponUsed = false;
 let setOpen = false;
 let running = false; // koşu (düğme ya da Shift)
 let thirdPerson = false; // P: iç görüş / dış görüş (yürürken)
+// satılık arabalar (galeri)
 // satılık arabalar ve motorlar (galeri)
 const CARS = [
   {id:'scooter', name:'🛵 Scooter Motor', price:8000, type:'moto', color:'#0ea5e9', speed:7.5},
   {id:'kucuk', name:'Küçük Araba', price:10000, type:'sedan', color:'#f1c40f', speed:6},
   {id:'tofas', name:'Tofaş', price:18000, type:'sedan', color:'#8b1a1a', speed:6.5},
   {id:'sedan', name:'Sedan', price:25000, type:'sedan', color:'#2980b9', speed:7},
+  {id:'tofas', name:'Tofaş', price:18000, type:'sedan', color:'#8b1a1a', speed:6.5},
   {id:'yaris_motor', name:'🏍️ Yarış Motoru', price:30000, type:'moto', color:'#dc2626', speed:10.5},
   {id:'taksi', name:'Taksi', price:35000, type:'taxi', color:'#f1c40f', speed:7.5},
   {id:'minibus', name:'Minibüs', price:50000, type:'van', color:'#f5f6fa', speed:7},
@@ -761,11 +757,9 @@ const CARS = [
 ];
 // COMOGENE dükkânı: sürülebilir (konumu ve yönü burada tutulur)
 const CM = {x:9.4, z:-12, h:0, v:0, driving:false};
-// oyuncunun arabası ve motoru: ikisi ayrı park edilir, hangisine yakınsan ona binip sürersin
-const C = {x:-6.5, z:-30, h:0, v:0, driving:false, maxV:6, driftOn:true, drifting:false, camDist:3.6, nitro:100, hazard:false, activeVeh:'car'};
-const CAR_STATE = {x:-6.5, z:-30, h:0};
-const MOTO_STATE = {x:-6.5, z:-25.5, h:0};
-let ownedCarMesh = null, ownedMotoMesh = null;
+// oyuncunun arabası: sokağa park edilir, binip sürülür
+const C = {x:-6.5, z:-30, h:0, v:0, driving:false, maxV:6, driftOn:true, drifting:false, camDist:3.6, nitro:100, hazard:false};
+let ownedCarMesh = null;
 const active = () => !shopOpen && !over && !shiftEnded && !tutOpen && !setOpen;
 
 /* ================= Renderer / sahne ================= */
@@ -1974,15 +1968,17 @@ const waiterState = {x: 7.4, z: -4.5, state: 'idle', targetCust: null, targetTb:
 const courierGroup = new THREE.Group();
 courierGroup.position.set(6.4, 0, 3.8);
 courierGroup.rotation.y = -Math.PI / 2;
-// motosiklet gövdesi
-addTo(courierGroup, B(0.36, 0.45, 1.35), M(0xdc2626), 0, 0.48, 0);
-addTo(courierGroup, B(0.38, 0.12, 0.65), M(0x1f2937), 0, 0.74, 0.1); // sele
-addTo(courierGroup, B(0.7, 0.06, 0.06), M(0x9ca3af), 0, 0.96, -0.48); // gidon
-addTo(courierGroup, B(0.18, 0.48, 0.18), M(0x374151), 0, 0.68, -0.48); // ön maşa
-addTo(courierGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.14, 10).rotateZ(Math.PI / 2), M(0x111111), 0, 0.26, -0.52); // ön teker
-addTo(courierGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.14, 10).rotateZ(Math.PI / 2), M(0x111111), 0, 0.26, 0.52);  // arka teker
+// motosiklet gövdesi (tekerleklere değmez)
+addTo(courierGroup, B(0.36, 0.36, 0.72), M(0xdc2626), 0, 0.56, 0);
+addTo(courierGroup, B(0.34, 0.16, 0.42), M(0xdc2626), 0, 0.72, 0.48); // arka kuyruk
+addTo(courierGroup, B(0.38, 0.12, 0.65), M(0x1f2937), 0, 0.78, 0.1); // sele
+addTo(courierGroup, B(0.7, 0.06, 0.06), M(0x9ca3af), 0, 0.98, -0.52); // gidon
+addTo(courierGroup, B(0.05, 0.48, 0.08), M(0x374151), -0.12, 0.58, -0.58).rotation.x = -0.2; // sol ön maşa
+addTo(courierGroup, B(0.05, 0.48, 0.08), M(0x374151), 0.12, 0.58, -0.58).rotation.x = -0.2;  // sağ ön maşa
+addTo(courierGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.14, 10).rotateZ(Math.PI / 2), M(0x111111), 0, 0.26, -0.66); // ön teker
+addTo(courierGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.14, 10).rotateZ(Math.PI / 2), M(0x111111), 0, 0.26, 0.66);  // arka teker
 // arka sıcak yemek çantası (sarı/turuncu paket kutusu)
-addTo(courierGroup, B(0.52, 0.48, 0.52), M(0xf59e0b), 0, 0.98, 0.52);
+addTo(courierGroup, B(0.52, 0.48, 0.52), M(0xf59e0b), 0, 1.04, 0.54);
 const courierRider = human(0xea580c, 0x1f2937, pick(SKINS), 0x1b1b1b);
 addTo(courierRider, new THREE.SphereGeometry(0.23, 10, 8), M(0xfacc15), 0, 1.88, 0); // kurye kaskı
 if(typeof makeNameSprite === 'function') courierRider.add(makeNameSprite('🛵 PAKET KURYE'));
@@ -2084,42 +2080,48 @@ function car(color, type = 'sedan'){
   const g = new THREE.Group();
   const paint = M(color);
   if(type === 'moto'){
-    // 3D Yarış Motoru / Motosiklet: gövde, yakıt deposu, sele, gidon, ön cam, egzoz, ön/arka far ve tekerlekler
-    addTo(g, B(0.42, 0.46, 1.75), paint, 0, 0.56, 0); // ana şasi ve karenaj
-    addTo(g, B(0.46, 0.26, 0.68), paint, 0, 0.84, -0.25); // yakıt deposu
-    addTo(g, B(0.38, 0.14, 0.72), TRIM_M, 0, 0.78, 0.42); // sele (koltuk)
-    addTo(g, B(0.36, 0.22, 0.45), paint, 0, 0.88, 0.86); // arka kuyruk
-    addTo(g, B(0.38, 0.32, 0.06), GLASS_M, 0, 1.04, -0.68).rotation.x = 0.45; // ön rüzgarlık camı
-    addTo(g, B(0.86, 0.06, 0.06), M(0xd1d5db), 0, 0.98, -0.58); // gidon
-    addTo(g, B(0.16, 0.07, 0.08), TRIM_M, -0.38, 0.98, -0.58); // sol elcik
-    addTo(g, B(0.16, 0.07, 0.08), TRIM_M, 0.38, 0.98, -0.58);  // sağ elcik
-    addTo(g, B(0.22, 0.58, 0.14), M(0x9ca3af), 0, 0.62, -0.78); // ön amortisör çatalı
-    // egzoz borusu
-    const mEx = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.75, 8).rotateX(Math.PI / 2), M(0x9ca3af));
-    mEx.position.set(0.26, 0.42, 0.58);
+    // 3D Yarış Motoru / Motosiklet: gövde ve çatal tekerleklere değmez, aralarında net boşluk vardır
+    addTo(g, B(0.42, 0.42, 0.90), paint, 0, 0.62, 0); // orta motor bloğu ve karenaj (tekerleklerden uzakta)
+    addTo(g, B(0.44, 0.24, 0.62), paint, 0, 0.88, -0.22); // yakıt deposu
+    addTo(g, B(0.38, 0.24, 0.36), paint, 0, 0.86, -0.68); // ön burun karenajı (ön tekerin üstünde)
+    addTo(g, B(0.38, 0.14, 0.64), TRIM_M, 0, 0.82, 0.36); // sele (koltuk)
+    addTo(g, B(0.34, 0.20, 0.44), paint, 0, 0.92, 0.82); // arka kuyruk (arka tekerin üstünde)
+    addTo(g, B(0.38, 0.30, 0.05), GLASS_M, 0, 1.06, -0.76).rotation.x = 0.45; // ön rüzgarlık camı
+    addTo(g, B(0.84, 0.06, 0.06), M(0xd1d5db), 0, 1.00, -0.62); // gidon
+    addTo(g, B(0.16, 0.07, 0.08), TRIM_M, -0.38, 1.00, -0.62); // sol elcik
+    addTo(g, B(0.16, 0.07, 0.08), TRIM_M, 0.38, 1.00, -0.62);  // sağ elcik
+    // ön amortisör çatalları (tekerleğin iki yanından iner, tekere değmez)
+    addTo(g, B(0.05, 0.56, 0.08), M(0x9ca3af), -0.15, 0.62, -0.82).rotation.x = -0.22;
+    addTo(g, B(0.05, 0.56, 0.08), M(0x9ca3af), 0.15, 0.62, -0.82).rotation.x = -0.22;
+    // arka maşa kolları (arka tekerin iki yanından uzanır, tekere değmez)
+    addTo(g, B(0.05, 0.10, 0.52), M(0x4b5563), -0.15, 0.38, 0.66);
+    addTo(g, B(0.05, 0.10, 0.52), M(0x4b5563), 0.15, 0.38, 0.66);
+    // egzoz borusu (yan tarafta, arka tekere değmez)
+    const mEx = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.68, 8).rotateX(Math.PI / 2), M(0x9ca3af));
+    mEx.position.set(0.26, 0.48, 0.56);
     g.add(mEx);
     // ön far ve arka stop lambası (GEO.light kullanarak far sistemiyle tam uyumlu)
-    addTo(g, GEO.light, HEAD_M, 0, 0.82, -0.92);
-    addTo(g, GEO.light, TAIL_M, 0, 0.88, 1.08);
-    // plaka (arkada)
-    addTo(g, GEO.plate, PLATE_M, 0, 0.68, 1.10);
-    // ön ve arka motosiklet tekerlekleri
-    [[0, 0.82], [0, -0.82]].forEach(([x, z]) => {
+    addTo(g, GEO.light, HEAD_M, 0, 0.86, -0.88);
+    addTo(g, GEO.light, TAIL_M, 0, 0.92, 1.05);
+    // plaka (arkada, tekerin üstünde)
+    addTo(g, GEO.plate, PLATE_M, 0, 0.78, 1.08);
+    // ön ve arka motosiklet tekerlekleri (gövdeyle arasında net boşluk var)
+    [[0, 0.92], [0, -0.92]].forEach(([x, z]) => {
       const w = addTo(g, GEO.wheel, TIRE_M, x, 0.36, z);
       w.scale.set(0.65, 1, 1);
       w.name = 'wheel';
       addTo(w, GEO.rim, RIM_M, 0, 0, 0);
     });
-    // üzerinde kasklı sürücü figürü (yalnızca sürülürken görünür, park halindeyken gizlenir)
+    // üzerinde kasklı sürücü figürü (yalnızca sürülürken görünür, ayakları orta pedallarda, tekere değmez)
     const rider = new THREE.Group();
     rider.name = 'motoRider';
-    addTo(rider, B(0.42, 0.58, 0.26), M(0x1f2937), 0, 1.18, 0.18).rotation.x = 0.35; // gövde öne eğik
-    addTo(rider, new THREE.SphereGeometry(0.21, 10, 8), paint, 0, 1.58, -0.02); // yarış kaskı
-    addTo(rider, B(0.32, 0.11, 0.06), GLASS_M, 0, 1.58, -0.20); // kask vizörü
-    addTo(rider, B(0.14, 0.52, 0.14), M(0x1f2937), -0.24, 1.08, -0.18).rotation.x = -0.7; // sol kol gidona uzanır
-    addTo(rider, B(0.14, 0.52, 0.14), M(0x1f2937), 0.24, 1.08, -0.18).rotation.x = -0.7;  // sağ kol gidona uzanır
-    addTo(rider, B(0.16, 0.50, 0.18), M(0x111827), -0.22, 0.64, 0.22).rotation.x = 0.5;   // sol bacak
-    addTo(rider, B(0.16, 0.50, 0.18), M(0x111827), 0.22, 0.64, 0.22).rotation.x = 0.5;    // sağ bacak
+    addTo(rider, B(0.40, 0.56, 0.25), M(0x1f2937), 0, 1.22, 0.18).rotation.x = 0.35; // gövde öne eğik
+    addTo(rider, new THREE.SphereGeometry(0.21, 10, 8), paint, 0, 1.62, -0.02); // yarış kaskı
+    addTo(rider, B(0.32, 0.11, 0.06), GLASS_M, 0, 1.62, -0.20); // kask vizörü
+    addTo(rider, B(0.13, 0.50, 0.13), M(0x1f2937), -0.24, 1.12, -0.20).rotation.x = -0.7; // sol kol gidona uzanır
+    addTo(rider, B(0.13, 0.50, 0.13), M(0x1f2937), 0.24, 1.12, -0.20).rotation.x = -0.7;  // sağ kol gidona uzanır
+    addTo(rider, B(0.14, 0.44, 0.16), M(0x111827), -0.25, 0.68, 0.16).rotation.x = 0.35;   // sol bacak (ortada, tekere değmez)
+    addTo(rider, B(0.14, 0.44, 0.16), M(0x111827), 0.25, 0.68, 0.16).rotation.x = 0.35;    // sağ bacak (ortada, tekere değmez)
     g.add(rider);
     const carSpot = new THREE.Mesh(new THREE.CircleGeometry(2.4, 16), carSpotMat);
     carSpot.rotation.x = -Math.PI / 2;
@@ -2530,6 +2532,7 @@ function renderStats(){
     `<span id="lvlBtn" style="cursor:pointer;text-decoration:underline">Seviye <b>${S.level || 1}</b> <small>(${Math.max(0, xpFor((S.level || 1) + 1) - (S.xp || 0)).toLocaleString('tr-TR')}₺ kaldı)</small></span> · Gün <b>${S.day}</b> · ${m}:${String(s).padStart(2,'0')}<br>` +
     (() => { const lv = S.level || 1, lo = xpFor(lv), hi = xpFor(lv + 1); const pct = Math.min(100, Math.max(0, ((S.xp || 0) - lo) / (hi - lo) * 100)); return `<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:2px 0 4px">` + `<i style="display:block;height:100%;width:${pct}%;background:#ffd54a"></i></div>`; })() +
     `Kazanç <b>${shiftEarned}</b>₺<br>` +
+    `Para <b>${S.money}₺</b><br>` +
     `Para <b>${S.money}₺</b>` + ((S.bank || 0) > 0 ? ` · 🏦 <b>${S.bank}₺</b>` : '') + ((S.loan || 0) > 0 ? ` · 💳 <b style="color:#f87171">-${S.loan}₺</b>` : '') + `<br>` +
     (rushOn ? '<br><span style="color:#ffd54a">⚡ RUSH</span>' : '') +
     (hotLeft > 0 ? '<br><span style="color:#ff8a4c">🔥 Sıcak Saat x2</span>' : '') +
@@ -3169,12 +3172,15 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
   const isSport = def.type === 'sport';
   const isMoto = def.type === 'moto';
   const stripeY = isSport ? 0.73 : 0.96;
+  const sigY = isSport ? 0.62 : 0.85;
+  const sigZ = isSport ? 2.20 : 2.12;
   const sigY = isMoto ? 0.82 : (isSport ? 0.62 : 0.85);
   const sigZ = isMoto ? 0.92 : (isSport ? 2.20 : 2.12);
   const sigX = isMoto ? 0.28 : 0.85;
   const spTopY = isSport ? 0.96 : 1.25;
   const spLegY = isSport ? 0.82 : 1.1;
   const mesh = car(isMoto ? def.color : (mods.paint || def.color), def.type);
+  if(mods.sprey){
   if(mods.sprey && !isMoto){
     const stripeMat = M(0x111111);
     [-0.35, 0.35].forEach(x => {
@@ -3207,11 +3213,13 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
     else { tails.push(ch); ch.material = tailOff; }
   });
   const sigMat = new THREE.MeshBasicMaterial({color: 0xffa500});
+  [[-0.85, -sigZ], [-0.85, sigZ]].forEach(([x, z]) => {
   [[-sigX, -sigZ], [-sigX, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
     m.position.set(x, sigY, z); m.visible = false;
     mesh.add(m); sigL.push(m);
   });
+  [[0.85, -sigZ], [0.85, sigZ]].forEach(([x, z]) => {
   [[sigX, -sigZ], [sigX, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
     m.position.set(x, sigY, z); m.visible = false;
@@ -3224,6 +3232,7 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
   beamSpot.visible = false;
   mesh.add(beamSpot);
   mesh.userData.lights = {heads, tails, sigL, sigR, headOn, headOff, tailOn, tailOff, beamSpot};
+  if(mods.spoiler){
   if(mods.spoiler && !isMoto){
     const sp = new THREE.Mesh(B(1.8, 0.08, 0.3), M(0x111111));
     sp.position.set(0, spTopY, 2.0);
@@ -3235,14 +3244,17 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
     });
   }
   if(mods.neon){
+    const n = new THREE.Mesh(B(1.9, 0.02, 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
     const n = new THREE.Mesh(B(isMoto ? 0.65 : 1.9, 0.02, isMoto ? 1.8 : 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
     n.position.set(0, 0.2, 0);
     mesh.add(n);
   }
+  if(mods.ses && typeof attachTrunkSoundSystem === 'function'){
   if(mods.ses && !isMoto && typeof attachTrunkSoundSystem === 'function'){
     mesh.userData.trunkSys = attachTrunkSoundSystem(mesh, mods.paint || def.color, isSport);
   }
   if(ownerName){
+    const sp = makeNameSprite('🚗 ' + ownerName);
     const sp = makeNameSprite((isMoto ? '🏍️ ' : '🚗 ') + ownerName);
     sp.position.y = 2.0;
     mesh.add(sp);
@@ -3356,8 +3368,7 @@ let lastCoopBroadcast = 0;
 let lastPingSent = 0;
 let lastBroadX = 0, lastBroadZ = 0, lastBroadYaw = 0, lastBroadSigKey = '';
 function getMyWorldPos(){
-  const activeVehId = C.driving ? (C.activeVeh === 'moto' ? S.moto : S.car) : (S.car || S.moto);
-  if(C.driving) return {x: C.x, z: C.z, yaw: C.h + Math.PI, driving: true, carId: activeVehId, carPaint: S.mods && S.mods.paint};
+  if(C.driving) return {x: C.x, z: C.z, yaw: C.h + Math.PI, driving: true, carId: S.car, carPaint: S.mods && S.mods.paint};
   if(D.driving) return {x: D.x, z: D.z, yaw: D.h + Math.PI, driving: false};
   if(CM.driving) return {x: CM.x, z: CM.z, yaw: CM.h + Math.PI, driving: false};
   return {x: P.x, z: P.z, yaw: P.yaw, driving: false};
@@ -4424,14 +4435,12 @@ function updateSpatialCarRadios(){
   const ear = getMyWorldPos();
   // 1) Kendi arabamızın radyosu: arabanın içindeyken tam ses, dışındayken arabadan uzaklaştıkça sesi azalır
   if(radioAudioEl){
-    if(!S.car && !S.moto){
+    if(!S.car){
       radioAudioEl.volume = 0;
     } else if(C.driving){
       radioAudioEl.volume = 0.85;
     } else {
-      const rx = S.car ? CAR_STATE.x : MOTO_STATE.x;
-      const rz = S.car ? CAR_STATE.z : MOTO_STATE.z;
-      const dist = Math.hypot(ear.x - rx, ear.z - rz);
+      const dist = Math.hypot(ear.x - C.x, ear.z - C.z);
       const maxDist = 42;
       radioAudioEl.volume = Math.max(0, Math.min(0.85, (1 - dist / maxDist) * 0.85));
     }
@@ -4455,7 +4464,7 @@ function updateSpatialCarRadios(){
   }
 }
 function openRadioModal(){
-  const nearMyCar = (S.car && Math.hypot(P.x - CAR_STATE.x, P.z - CAR_STATE.z) < 5) || (S.moto && Math.hypot(P.x - MOTO_STATE.x, P.z - MOTO_STATE.z) < 5);
+  const nearMyCar = S.car && Math.hypot(P.x - C.x, P.z - C.z) < 5;
   if(!C.driving && !passengerOf && !nearMyCar) return;
   if($('radioModal')) $('radioModal').style.display = 'flex';
   if($('radioCodeIn')) $('radioCodeIn').focus();
@@ -4708,11 +4717,10 @@ window.addEventListener('keydown', e => {
   thirdPerson = !thirdPerson;
   flash(thirdPerson ? 'Dış görüş' : 'İç görüş', '#7dd3fc');
 });
-// E: arabaya veya motora bin / in
+// E: arabaya bin / arabadan in
 window.addEventListener('keydown', e => {
   if(e.key.toLowerCase() !== 'e') return;
   if($('carBtn').style.display === 'block') $('carBtn').click();
-  else if($('motoBtn') && $('motoBtn').style.display === 'block') $('motoBtn').click();
   else if($('carExit').style.display === 'block') $('carExit').click();
 });
 
@@ -5102,6 +5110,7 @@ function endShift(reason){
       interestMsg = ` Banka faizi: +${interest.toLocaleString('tr-TR')}₺!`;
     }
     title = 'Vardiya Tamam!';
+    text = `Hedefi tutturdun: ${shiftEarned}₺. Bonus +${bonus}₺. Yarın gün ${S.day + 1}.`;
     text = `Hedefi tutturdun: ${shiftEarned}₺. Bonus +${bonus}₺.${interestMsg} Yarın gün ${S.day + 1}.`;
     S.day++;
   } else {
@@ -5836,12 +5845,16 @@ function attachTrunkSoundSystem(carGroup, paintCol, isSport){
   carGroup.add(lidPivot);
   return {speakerBox, lidPivot, cones};
 }
-function buildOwnedVehicleMesh(vehId){
-  const def = CARS.find(c => c.id === vehId);
-  if(!def) return null;
+function spawnOwnedCar(){
+  if(ownedCarMesh) scene.remove(ownedCarMesh);
+  ownedCarMesh = null;
+  const def = CARS.find(c => c.id === S.car);
+  if(!def) return;
   const isSport = def.type === 'sport';
   const isMoto = def.type === 'moto';
   const stripeY = isSport ? 0.73 : 0.96;
+  const sigY = isSport ? 0.62 : 0.85;
+  const sigZ = isSport ? 2.20 : 2.12;
   const sigY = isMoto ? 0.82 : (isSport ? 0.62 : 0.85);
   const sigZ = isMoto ? 0.92 : (isSport ? 2.20 : 2.12);
   const sigX = isMoto ? 0.28 : 0.85;
@@ -5854,72 +5867,89 @@ function buildOwnedVehicleMesh(vehId){
     [-0.35, 0.35].forEach(x => {
       const s = new THREE.Mesh(B(0.2, 0.02, 4.2), stripeMat);
       s.position.set(x, stripeY, 0);
-      mesh.add(s);
+      ownedCarMesh.add(s);
     });
   }
+  // jant ve far modifiyeleri
   if(S.mods.jant){
     const gold = new THREE.MeshLambertMaterial({color: 0xd4af37});
-    mesh.children.forEach(w => { if(w.name === 'wheel') w.children.forEach(r => { if(r.material === RIM_M) r.material = gold; }); });
+    ownedCarMesh.children.forEach(w => { if(w.name === 'wheel') w.children.forEach(r => { if(r.material === RIM_M) r.material = gold; }); });
   }
   if(S.mods.far){
     const xenon = new THREE.MeshBasicMaterial({color: 0x9fe8ff});
-    mesh.children.forEach(ch => { if(ch.material === HEAD_M) ch.material = xenon; });
+    ownedCarMesh.children.forEach(ch => { if(ch.material === HEAD_M) ch.material = xenon; });
   }
+  // kendi plakamız: galeride yazılan metin
   const myPlate = makeCarPlate(S.plate || '06 ABC 123');
-  mesh.children.forEach(ch => { if(ch.material === PLATE_M) ch.material = myPlate; });
-  const beam = new THREE.PointLight(0xfff0c0, 0, 22);
-  beam.position.set(0, 0.6, -3.0);
-  mesh.add(beam);
-  const beamSpot = new THREE.Mesh(new THREE.CircleGeometry(4.5, 32),
+  ownedCarMesh.children.forEach(ch => { if(ch.material === PLATE_M) ch.material = myPlate; });
+  // far ışığı (L ile açılır): arabanın önünü aydınlatan ışık kaynağı
+  C.beam = new THREE.PointLight(0xfff0c0, 0, 22);
+  C.beam.position.set(0, 0.6, -3.0); // önde, yere yakın
+  ownedCarMesh.add(C.beam);
+  // yerdeki far lekesi: farın düştüğü yeri gösteren parlak daire
+  C.beamSpot = new THREE.Mesh(new THREE.CircleGeometry(4.5, 32),
     new THREE.MeshBasicMaterial({color: 0xfff0a0, transparent: true, opacity: 0.35, depthWrite: false}));
-  beamSpot.rotation.x = -Math.PI / 2;
-  beamSpot.position.set(0, 0.05, -7.0);
-  beamSpot.visible = false;
-  mesh.add(beamSpot);
-  const heads = [], tails = [];
-  const headOn = new THREE.MeshBasicMaterial({color: S.mods.far ? 0x9fe8ff : 0xfff6c8});
-  const headOff = new THREE.MeshBasicMaterial({color: 0x444444});
-  const tailOn = new THREE.MeshBasicMaterial({color: 0xff2a2a});
-  const tailOff = new THREE.MeshBasicMaterial({color: 0x5a1a1a});
-  mesh.children.forEach(ch => {
+  C.beamSpot.rotation.x = -Math.PI / 2;
+  C.beamSpot.position.set(0, 0.05, -7.0);
+  C.beamSpot.visible = false;
+  ownedCarMesh.add(C.beamSpot);
+  // farlar ve stop lambaları: sürerken farlar yanar, fren yapınca stop lambaları parlar
+  C.heads = []; C.tails = [];
+  C.headOn = new THREE.MeshBasicMaterial({color: S.mods.far ? 0x9fe8ff : 0xfff6c8});
+  C.headOff = new THREE.MeshBasicMaterial({color: 0x444444});
+  C.tailOn = new THREE.MeshBasicMaterial({color: 0xff2a2a});
+  C.tailOff = new THREE.MeshBasicMaterial({color: 0x5a1a1a});
+  ownedCarMesh.children.forEach(ch => {
     if(ch.geometry !== GEO.light) return;
-    if(ch.position.z < 0){ heads.push(ch); ch.material = headOff; }
-    else { tails.push(ch); ch.material = tailOff; }
+    if(ch.position.z < 0){ C.heads.push(ch); ch.material = C.headOff; }
+    else { C.tails.push(ch); ch.material = C.tailOff; }
   });
-  const sigL = [], sigR = [];
+  // dönüş sinyalleri (turuncu, direksiyon yönüne göre yanıp söner)
+  C.sigL = []; C.sigR = [];
   const sigMat = new THREE.MeshBasicMaterial({color: 0xffa500});
+  [[-0.85, -sigZ], [-0.85, sigZ]].forEach(([x, z]) => {
   [[-sigX, -sigZ], [-sigX, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
     m.position.set(x, sigY, z); m.visible = false;
-    mesh.add(m); sigL.push(m);
+    ownedCarMesh.add(m); C.sigL.push(m);
   });
+  [[0.85, -sigZ], [0.85, sigZ]].forEach(([x, z]) => {
   [[sigX, -sigZ], [sigX, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
     m.position.set(x, sigY, z); m.visible = false;
-    mesh.add(m); sigR.push(m);
+    ownedCarMesh.add(m); C.sigR.push(m);
   });
+  // modifiyeler: spoiler (arka), neon (alttan mavi ışık)
+  if(S.mods.spoiler){
   if(S.mods.spoiler && !isMoto){
     const sp = new THREE.Mesh(B(1.8, 0.08, 0.3), M(0x111111));
     sp.position.set(0, spTopY, 2.0);
-    mesh.add(sp);
+    ownedCarMesh.add(sp);
+    // spoiler tutacakları (bagajdan iki destek)
     [-0.7, 0.7].forEach(x => {
       const st = new THREE.Mesh(B(0.06, 0.2, 0.06), M(0x111111));
       st.position.set(x, spLegY, 2.0);
-      mesh.add(st);
+      ownedCarMesh.add(st);
     });
   }
   if(S.mods.neon){
+    const n = new THREE.Mesh(B(1.9, 0.02, 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
     const n = new THREE.Mesh(B(isMoto ? 0.65 : 1.9, 0.02, isMoto ? 1.8 : 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
     n.position.set(0, 0.2, 0);
-    mesh.add(n);
+    ownedCarMesh.add(n);
   }
-  let trunkSys = null;
+  if(S.mods.ses){
   if(S.mods.ses && !isMoto){
-    trunkSys = attachTrunkSoundSystem(mesh, S.mods.paint || def.color, isSport);
-    trunkSys.speakerBox.visible = !!C.trunkOpen;
-    trunkSys.lidPivot.visible = !!C.trunkOpen;
-    trunkSys.lidPivot.rotation.x = C.trunkOpen ? 0.92 : 0;
+    C.trunkSys = attachTrunkSoundSystem(ownedCarMesh, S.mods.paint || def.color, isSport);
+    C.trunkSys.speakerBox.visible = !!C.trunkOpen;
+    C.trunkSys.lidPivot.visible = !!C.trunkOpen;
+    C.trunkSys.lidPivot.rotation.x = C.trunkOpen ? 0.92 : 0;
+  } else {
+    C.trunkSys = null;
+    C.trunkOpen = false;
   }
+  scene.add(ownedCarMesh);
+  // Tofaş logosu: ön yüzde mavi "T"
   if(def.id === 'tofas'){
     const logoTex = tex(128, 128, (g, w, h) => {
       g.fillStyle = '#1e3a8a'; g.fillRect(0, 0, w, h);
@@ -5930,12 +5960,9 @@ function buildOwnedVehicleMesh(vehId){
     const logo = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.13), new THREE.MeshBasicMaterial({map: logoTex}));
     logo.position.set(0, 0.84, -2.14);
     logo.rotation.y = Math.PI;
-    mesh.add(logo);
+    ownedCarMesh.add(logo);
   }
-  const maxV = def.speed + (S.mods.spoiler ? 0.5 : 0) + (S.mods.turbo ? 1.5 : 0) + (S.mods.egzoz ? 0.3 : 0);
-  mesh.userData.vehCtrl = {beam, beamSpot, heads, tails, headOn, headOff, tailOn, tailOff, sigL, sigR, trunkSys, maxV, isMoto};
-  scene.add(mesh);
-  return mesh;
+  C.maxV = def.speed + (S.mods.spoiler ? 0.5 : 0) + (S.mods.turbo ? 1.5 : 0) + (S.mods.egzoz ? 0.3 : 0);
 }
 function applyActiveVehBindings(){
   const activeMesh = C.activeVeh === 'moto' ? (ownedMotoMesh || ownedCarMesh) : (ownedCarMesh || ownedMotoMesh);
@@ -6232,7 +6259,7 @@ const MODS = [
 function renderMods(){
   const box = $('modBody');
   box.innerHTML = '';
-  if(!S.car && !S.moto){ box.innerHTML = '<i style="color:var(--mut)">Önce bir araba veya motor al.</i>'; return; }
+  if(!S.car){ box.innerHTML = '<i style="color:var(--mut)">Önce bir araba al.</i>'; return; }
   MODS.forEach(m => {
     const owned = m.paint ? S.mods.paint === m.paint : !!S.mods[m.id];
     const d = document.createElement('div');
@@ -6255,6 +6282,7 @@ function renderMods(){
     box.appendChild(d);
   });
 }
+$('galClose').onclick = () => {
 if($('galClose')) $('galClose').onclick = () => {
   setOpen = false;
   $('gal').style.display = 'none';
@@ -6350,86 +6378,51 @@ if($('bankPayLoanBtn')) $('bankPayLoanBtn').onclick = () => {
 function renderGallery(){
   const box = $('galBody');
   box.innerHTML = '';
-  const addSection = (title, list, isMotoSec) => {
-    const h = document.createElement('h3');
-    h.textContent = title;
-    box.appendChild(h);
-    list.forEach(c => {
-      const owned = isMotoSec ? (S.moto === c.id) : (S.car === c.id);
-      const d = document.createElement('div');
-      d.className = 'row';
-      d.innerHTML = `<span>${c.name}<small>${c.price.toLocaleString('tr-TR')}₺</small></span>`;
-      const b = document.createElement('button');
-      b.textContent = owned ? 'Sahip' : 'Al';
-      b.disabled = owned || S.money < c.price;
-      b.onclick = () => {
-        if(S.money < c.price) return;
-        S.money -= c.price;
-        C.driving = false; C.v = 0;
-        if(isMotoSec){
-          S.moto = c.id;
-          MOTO_STATE.x = -6.5; MOTO_STATE.z = -25.5; MOTO_STATE.h = 0;
-          C.activeVeh = 'moto';
-          C.x = MOTO_STATE.x; C.z = MOTO_STATE.z; C.h = 0;
-        } else {
-          S.car = c.id;
-          if(S.mk.garaj){ CAR_STATE.x = 18.75; CAR_STATE.z = -21; } else { CAR_STATE.x = -6.5; CAR_STATE.z = -30; }
-          CAR_STATE.h = 0;
-          C.activeVeh = 'car';
-          C.x = CAR_STATE.x; C.z = CAR_STATE.z; C.h = 0;
-          S.mods.paint = null;
-        }
-        spawnOwnedCar();
-        broadcastCoopPos(true);
-        beep(700, 0.1);
-        flash(`${c.name} alındı, sokağa park edildi! (Araban ve motorun ayrı durur)`, '#4ade80');
-        renderGallery(); renderMods(); renderAll();
-      };
-      d.appendChild(b);
-      box.appendChild(d);
-    });
-  };
-  addSection('🚗 Arabalar', CARS.filter(c => c.type !== 'moto'), false);
-  addSection('🏍️ Motorlar (Araban Gitmez, Ayrı Alınır)', CARS.filter(c => c.type === 'moto'), true);
+  CARS.forEach(c => {
+    const owned = S.car === c.id;
+    const d = document.createElement('div');
+    d.className = 'row';
+    d.innerHTML = `<span>${c.name}<small>${c.price.toLocaleString('tr-TR')}₺</small></span>`;
+    const b = document.createElement('button');
+    b.textContent = owned ? 'Sahip' : 'Al';
+    b.disabled = owned || S.money < c.price;
+    b.onclick = () => {
+      if(S.money < c.price) return;
+      S.money -= c.price;
+      S.car = c.id;
+      C.driving = false; C.v = 0;
+      // yeni araba galerinin önündeki park yerine gelsin
+      // garaj varsa araba garaja gelsin, yoksa galerinin önündeki park yerine
+      if(S.mk.garaj){ C.x = 18.75; C.z = -21; } else { C.x = -6.5; C.z = -30; }
+      C.h = 0;
+      S.mods.paint = null; // yeni arabanın kendi rengi olsun
+      spawnOwnedCar();
+      broadcastCoopPos(true);
+      beep(700, 0.1);
+      flash(`${c.name} alındı, sokağa park edildi`, '#4ade80');
+      renderGallery(); renderAll();
+    };
+    d.appendChild(b);
+    box.appendChild(d);
+  });
 }
 $('carBtn').onclick = () => {
   if(!active() || !S.car) return;
   passengerOf = null;
-  C.activeVeh = 'car';
-  C.x = CAR_STATE.x; C.z = CAR_STATE.z; C.h = CAR_STATE.h;
-  applyActiveVehBindings();
   C.driving = true; C.v = 0;
   startEngine();
   broadcastCoopPos(true);
-  flash('🚗 Arabaya bindin', '#7dd3fc');
-  renderAll();
-};
-if($('motoBtn')) $('motoBtn').onclick = () => {
-  if(!active() || !S.moto) return;
-  passengerOf = null;
-  C.activeVeh = 'moto';
-  C.x = MOTO_STATE.x; C.z = MOTO_STATE.z; C.h = MOTO_STATE.h;
-  applyActiveVehBindings();
-  C.driving = true; C.v = 0;
-  startEngine();
-  broadcastCoopPos(true);
-  flash('🏍️ Motora bindin', '#7dd3fc');
+  flash('Arabaya bindin', '#7dd3fc');
   renderAll();
 };
 $('carExit').onclick = () => {
   if(!C.driving || Math.abs(C.v) > 1) { flash('Önce yavaşla', '#f87171'); return; }
-  const wasMoto = C.activeVeh === 'moto';
-  if(wasMoto){
-    MOTO_STATE.x = C.x; MOTO_STATE.z = C.z; MOTO_STATE.h = C.h;
-  } else {
-    CAR_STATE.x = C.x; CAR_STATE.z = C.z; CAR_STATE.h = C.h;
-  }
   C.driving = false; C.v = 0;
   stopEngine();
   P.x = C.x + 2.2; P.z = C.z;
   P.yaw = -Math.PI / 2;
   broadcastCoopPos(true);
-  flash(wasMoto ? '🏍️ Motordan indin' : '🚗 Arabadan indin', '#7dd3fc');
+  flash('Arabadan indin', '#7dd3fc');
   renderAll();
 };
 function toggleCarTrunk(){
@@ -7314,21 +7307,17 @@ function frame(now){
   }
   sty('hungerFill', 'width', hunger + '%');
   sty('hungerFill', 'background', hunger < 30 ? '#f87171' : '#ffb020');
-  const nearCar = S.car && !C.driving && !D.driving && Math.hypot(P.x - CAR_STATE.x, P.z - CAR_STATE.z) < 4;
-  const nearMoto = S.moto && !C.driving && !D.driving && Math.hypot(P.x - MOTO_STATE.x, P.z - MOTO_STATE.z) < 3.6;
-  const isDrivingMoto = !!(C.driving && C.activeVeh === 'moto');
+  const nearCar = S.car && !C.driving && !D.driving && Math.hypot(P.x - C.x, P.z - C.z) < 4;
+  const myCarDef = S.car ? CARS.find(c => c.id === S.car) : null;
+  const isMyMoto = !!(myCarDef && myCarDef.type === 'moto');
   disp('carBtn', nearCar ? 'block' : 'none');
-  if(nearCar) txt('carBtn', '🚗 Arabaya Bin (E)');
-  disp('motoBtn', nearMoto ? 'block' : 'none');
-  if(nearMoto) txt('motoBtn', '🏍️ Motora Bin (E)');
+  // arabanın üstünde "🚗 BİN (E)" etiketi
+  if(nearCar) txt('carBtn', isMyMoto ? '🏍️ Motora Bin (E)' : '🚗 Bin (E)');
   // arabanın/motorun üstünde "BİN (E)" etiketi
   const cl = $('carLabel');
-  if(nearCar || nearMoto){
-    const useMotoLbl = nearMoto && (!nearCar || Math.hypot(P.x - MOTO_STATE.x, P.z - MOTO_STATE.z) < Math.hypot(P.x - CAR_STATE.x, P.z - CAR_STATE.z));
-    cl.textContent = useMotoLbl ? '🏍️ MOTORA BİN (E)' : '🚗 ARABAYA BİN (E)';
-    const lx = useMotoLbl ? MOTO_STATE.x : CAR_STATE.x;
-    const lz = useMotoLbl ? MOTO_STATE.z : CAR_STATE.z;
-    const v = new THREE.Vector3(lx, 2.2, lz).project(camera);
+  if(nearCar){
+    cl.textContent = isMyMoto ? '🏍️ BİN (E)' : '🚗 BİN (E)';
+    const v = new THREE.Vector3(C.x, 2.2, C.z).project(camera);
     cl.style.display = 'block';
     cl.style.left = ((v.x + 1) / 2 * window.innerWidth) + 'px';
     cl.style.top = ((-v.y + 1) / 2 * window.innerHeight) + 'px';
@@ -7345,8 +7334,9 @@ function frame(now){
   }
   disp('hazardBtn', C.driving ? 'block' : 'none');
   txt('hazardBtn', C.hazard ? "🚨 4'lüler: Açık" : "🚨 4'lüleri Yak");
-  disp('radioBtn', (C.driving || passengerOf || nearCar || nearMoto) ? 'block' : 'none');
-  const showTrunkBtn = !!(S.car && !isDrivingMoto && S.mods && S.mods.ses && (C.driving || nearCar));
+  disp('radioBtn', (C.driving || passengerOf || nearCar) ? 'block' : 'none');
+  const showTrunkBtn = !!(S.car && S.mods && S.mods.ses && (C.driving || nearCar));
+  const showTrunkBtn = !!(S.car && !isMyMoto && S.mods && S.mods.ses && (C.driving || nearCar));
   disp('trunkBtn', showTrunkBtn ? 'block' : 'none');
   if(showTrunkBtn) txt('trunkBtn', C.trunkOpen ? '🔊 Bagaj: Açık' : '🔊 Bagaj & Hoparlör Aç');
   if(C.trunkSys && C.trunkOpen && myRadioCode && C.trunkSys.cones){
@@ -7692,10 +7682,9 @@ $('wheelBtn').onclick = spinWheel;
 resize();
 applySettings();
 drawPC();
-if(S.car || S.moto){
+if(S.car){
   // garaj varsa araba oradan başlasın
-  if(S.mk.garaj && !C.driving){ CAR_STATE.x = 18.75; CAR_STATE.z = -21; CAR_STATE.h = 0; }
-  C.x = CAR_STATE.x; C.z = CAR_STATE.z; C.h = CAR_STATE.h;
+  if(S.mk.garaj && !C.driving){ C.x = 18.75; C.z = -21; C.h = 0; }
   spawnOwnedCar();
 }
 
@@ -8403,7 +8392,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-24-225559';
+const APP_VERSION = '2026-10-24-230128';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
