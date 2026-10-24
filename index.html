@@ -622,7 +622,6 @@ function normalizeState(o){
   }
   if(!Array.isArray(out.inv) || out.inv.length !== 10) out.inv = Array(10).fill(null);
   if(!('hand' in out)) out.hand = null;
-  // Eğer eski kayıtta S.car bir motorsa, S.moto'ya taşı
   if(out.car && ['scooter', 'yaris_motor', 'super_motor'].includes(out.car)){
     if(!out.moto) out.moto = out.car;
     out.car = null;
@@ -8411,7 +8410,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-24-230737';
+const APP_VERSION = '2026-10-24-231917';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
