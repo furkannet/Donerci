@@ -2110,11 +2110,16 @@ function car(color, type = 'sedan'){
       w.name = 'wheel';
       addTo(w, GEO.rim, RIM_M, 0, 0, 0);
     });
-    // üzerinde kasklı sürücü figürü
+    // üzerinde kasklı sürücü figürü (yalnızca sürülürken görünür, park halindeyken gizlenir)
     const rider = new THREE.Group();
+    rider.name = 'motoRider';
     addTo(rider, B(0.42, 0.58, 0.26), M(0x1f2937), 0, 1.18, 0.18).rotation.x = 0.35; // gövde öne eğik
     addTo(rider, new THREE.SphereGeometry(0.21, 10, 8), paint, 0, 1.58, -0.02); // yarış kaskı
     addTo(rider, B(0.32, 0.11, 0.06), GLASS_M, 0, 1.58, -0.20); // kask vizörü
+    addTo(rider, B(0.14, 0.52, 0.14), M(0x1f2937), -0.24, 1.08, -0.18).rotation.x = -0.7; // sol kol gidona uzanır
+    addTo(rider, B(0.14, 0.52, 0.14), M(0x1f2937), 0.24, 1.08, -0.18).rotation.x = -0.7;  // sağ kol gidona uzanır
+    addTo(rider, B(0.16, 0.50, 0.18), M(0x111827), -0.22, 0.64, 0.22).rotation.x = 0.5;   // sol bacak
+    addTo(rider, B(0.16, 0.50, 0.18), M(0x111827), 0.22, 0.64, 0.22).rotation.x = 0.5;    // sağ bacak
     g.add(rider);
     const carSpot = new THREE.Mesh(new THREE.CircleGeometry(2.4, 16), carSpotMat);
     carSpot.rotation.x = -Math.PI / 2;
@@ -3051,7 +3056,10 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs, extra){
     }
   }
   if(extra && isNewerPos && st){
-    if(extra.car) st.car = extra.car;
+    if(extra.car){
+      if(['scooter', 'yaris_motor', 'super_motor'].includes(extra.car)) st.moto = extra.car;
+      else st.car = extra.car;
+    }
     if(extra.mods) st.mods = Object.assign({}, st.mods, extra.mods);
     if(extra.plate) st.plate = extra.plate;
   }
@@ -3166,7 +3174,7 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
   const sigX = isMoto ? 0.28 : 0.85;
   const spTopY = isSport ? 0.96 : 1.25;
   const spLegY = isSport ? 0.82 : 1.1;
-  const mesh = car(mods.paint || def.color, def.type);
+  const mesh = car(isMoto ? def.color : (mods.paint || def.color), def.type);
   if(mods.sprey && !isMoto){
     const stripeMat = M(0x111111);
     [-0.35, 0.35].forEach(x => {
@@ -3366,8 +3374,12 @@ function requestOnlinePing(){
   const rcVal = typeof myRadioCode === 'string' ? myRadioCode : '';
   const ctrkVal = !!(S.mods && S.mods.ses && C.trunkOpen);
   const pofVal = passengerOf ? String(passengerOf).toLowerCase() : '';
-  const netVehId = (C.driving && C.activeVeh === 'moto') ? S.moto : (S.car || S.moto);
-  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, avatarHidden: shouldHideMyAvatar(), pof: pofVal, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: netVehId, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), csteer: Number((C.steer || 0).toFixed(2)), chaz: !!C.hazard, cbrk: !!C.braking, cbm: !!C.beamOn, mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: netVehId, moto: S.moto, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
+  const useMotoNet = (C.driving && C.activeVeh === 'moto') || (!C.driving && !S.car && S.moto);
+  const netVehId = useMotoNet ? S.moto : (S.car || S.moto);
+  const netCx = Number((useMotoNet ? MOTO_STATE.x : CAR_STATE.x).toFixed(2));
+  const netCz = Number((useMotoNet ? MOTO_STATE.z : CAR_STATE.z).toFixed(2));
+  const netCh = Number((useMotoNet ? MOTO_STATE.h : CAR_STATE.h).toFixed(2));
+  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, avatarHidden: shouldHideMyAvatar(), pof: pofVal, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: netVehId, cx: netCx, cz: netCz, ch: netCh, cslip: Number((C.slip || 0).toFixed(2)), csteer: Number((C.steer || 0).toFixed(2)), chaz: !!C.hazard, cbrk: !!C.braking, cbm: !!C.beamOn, mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, moto: S.moto, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   postToRelays(pkt, true);
 }
@@ -3384,7 +3396,8 @@ function broadcastCoopPos(force){
   const ctrkVal = !!(S.mods && S.mods.ses && C.trunkOpen);
   const pofVal = passengerOf ? String(passengerOf).toLowerCase() : '';
   const hideVal = shouldHideMyAvatar();
-  const netVehId = (C.driving && C.activeVeh === 'moto') ? S.moto : (S.car || S.moto);
+  const useMotoNet = (C.driving && C.activeVeh === 'moto') || (!C.driving && !S.car && S.moto);
+  const netVehId = useMotoNet ? S.moto : (S.car || S.moto);
   const sigKey = `${csteerVal > 0.3 ? 1 : (csteerVal < -0.3 ? -1 : 0)}|${chazVal}|${cbrkVal}|${cbmVal}|${gunId}|${rcVal}|${ctrkVal}|${pofVal}|${hideVal}|${netVehId || ''}`;
   const sigChanged = sigKey !== lastBroadSigKey;
   const moved = Math.hypot(wp.x - lastBroadX, wp.z - lastBroadZ) > 0.02 || Math.abs(wp.yaw - lastBroadYaw) > 0.05 || sigChanged;
@@ -3393,13 +3406,13 @@ function broadcastCoopPos(force){
   const stVal = Number(shiftT.toFixed(1));
   const nmVal = !!nightMode;
   const wtVal = weather;
-  const cxVal = Number(C.x.toFixed(2));
-  const czVal = Number(C.z.toFixed(2));
-  const chVal = Number(C.h.toFixed(2));
+  const cxVal = Number((C.driving ? C.x : (useMotoNet ? MOTO_STATE.x : CAR_STATE.x)).toFixed(2));
+  const czVal = Number((C.driving ? C.z : (useMotoNet ? MOTO_STATE.z : CAR_STATE.z)).toFixed(2));
+  const chVal = Number((C.driving ? C.h : (useMotoNet ? MOTO_STATE.h : CAR_STATE.h)).toFixed(2));
   const cslipVal = Number((C.slip || 0).toFixed(2));
   // Yürürken ve araba sürerken anında (~80ms) WebSocket üzerinden gönder ki karşıda hiç beklemeden görünsün
   const pkt = force
-    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, avatarHidden: hideVal, pof: pofVal, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: netVehId, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: netVehId, moto: S.moto, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
+    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, avatarHidden: hideVal, pof: pofVal, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: netVehId, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, moto: S.moto, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
     : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, avatarHidden: hideVal, pof: pofVal, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: netVehId, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const minInterval = moved ? 80 : 2500;
@@ -3821,6 +3834,17 @@ function updateFriendCompanion(dt){
         fc.cslip = (fc.cslip || 0) + (targetSlip - (fc.cslip || 0)) * Math.min(1, dt * 10);
         fc.carMesh.position.set(fc.cx, 0, fc.cz);
         fc.carMesh.rotation.y = fc.ch + Math.PI + (fc.cslip || 0);
+        const peerSteerVal = (on && typeof on.csteer === 'number') ? on.csteer : 0;
+        const peerLeanTarget = isDrivingCar ? (-peerSteerVal * 0.34) : 0;
+        fc.carMesh.children.forEach(ch => {
+          if(ch.name === 'motoRider') ch.visible = isDrivingCar;
+          if(ch.name === 'wheel' && cdist > 0.01) ch.rotation.x -= cdist * 2.5;
+        });
+        if(fc.carMesh.getObjectByName('motoRider')){
+          fc.carMesh.rotation.z += (peerLeanTarget - (fc.carMesh.rotation.z || 0)) * Math.min(1, dt * 8);
+        } else {
+          fc.carMesh.rotation.z = 0;
+        }
         const lg = fc.carMesh.userData && fc.carMesh.userData.lights;
         if(lg){
           const peerBraking = !!(on && on.cbrk);
@@ -5399,10 +5423,10 @@ canvas.addEventListener('pointerup', e => {
   if(ray.intersectObject(gunDealer, true).length){ openArmShop(); return; }
   // elde silah varsa, boşluğa dokunmak o yöne ateş etmek
   if(S.hand){ fireRay(); return; }
-  // benzinciye dokunmak = arabayı doldur (istasyona park edilmişse)
+  // benzinciye dokunmak = arabayı veya motoru doldur (istasyona park edilmişse)
   if(ray.intersectObject(attendant, true).length){
-    const nearStation = S.car && Math.hypot(C.x - BENZIN_X, C.z + 52) < 8 && Math.abs(C.v) < 1;
-    if(!nearStation){ askNPC('Benzinci', -5.0, -52, ['Arabanı istasyona park et, doldurayım.']); return; }
+    const nearStation = ((S.car && Math.hypot(CAR_STATE.x - BENZIN_X, CAR_STATE.z + 52) < 8) || (S.moto && Math.hypot(MOTO_STATE.x - BENZIN_X, MOTO_STATE.z + 52) < 8) || ((S.car || S.moto) && Math.hypot(C.x - BENZIN_X, C.z + 52) < 8)) && Math.abs(C.v) < 1;
+    if(!nearStation){ askNPC('Benzinci', -5.0, -52, ['Arabanı veya motorunu istasyona park et, doldurayım.']); return; }
     if(S.fuel >= 100){ askNPC('Benzinci', -5.0, -52, ['Depo zaten dolu.']); return; }
     const cost = Math.ceil((100 - S.fuel) * 0.7);
     if(S.money < cost){ flash('Paran yetmiyor', '#f87171'); return; }
@@ -5823,7 +5847,8 @@ function buildOwnedVehicleMesh(vehId){
   const sigX = isMoto ? 0.28 : 0.85;
   const spTopY = isSport ? 0.96 : 1.25;
   const spLegY = isSport ? 0.82 : 1.1;
-  const mesh = car(S.mods.paint || def.color, def.type);
+  const vehColor = isMoto ? def.color : (S.mods.paint || def.color);
+  const mesh = car(vehColor, def.type);
   if(S.mods.sprey && !isMoto){
     const stripeMat = M(0x111111);
     [-0.35, 0.35].forEach(x => {
@@ -5936,6 +5961,8 @@ function spawnOwnedCar(){
     ownedMotoMesh = buildOwnedVehicleMesh(S.moto);
     ownedMotoMesh.position.set(MOTO_STATE.x, 0, MOTO_STATE.z);
     ownedMotoMesh.rotation.y = MOTO_STATE.h + Math.PI;
+    const mr = ownedMotoMesh.getObjectByName('motoRider');
+    if(mr) mr.visible = !!(C.driving && C.activeVeh === 'moto');
   }
   applyActiveVehBindings();
 }
@@ -6131,8 +6158,10 @@ $('towBtn').onclick = () => {
   if(S.money < 50){ flash('Çekici için 50₺ lazım', '#f87171'); return; }
   S.money -= 50;
   C.x = -12; C.z = -52; C.v = 0;
+  if(C.activeVeh === 'moto'){ MOTO_STATE.x = C.x; MOTO_STATE.z = C.z; }
+  else { CAR_STATE.x = C.x; CAR_STATE.z = C.z; }
   P.x = C.x + 2.2; P.z = C.z;
-  flash('Çekici arabayı benzinciye getirdi', '#7dd3fc');
+  flash('Çekici aracı benzinciye getirdi', '#7dd3fc');
   renderAll();
 };
 $('fuelBtn').onclick = () => {
@@ -6175,7 +6204,7 @@ $('plateSave').onclick = () => {
   if(hasProfanity(v)){ flash('🚫 Plakada küfür veya argo yasaktır!', '#f87171'); return; }
   S.plate = v;
   save();
-  if(S.car) spawnOwnedCar();
+  if(S.car || S.moto) spawnOwnedCar();
   broadcastCoopPos(true);
   flash(`Plaka kaydedildi: ${v}`, '#4ade80');
 };
@@ -6418,7 +6447,7 @@ function toggleCarTrunk(){
 }
 if($('trunkBtn')) $('trunkBtn').onclick = toggleCarTrunk;
 window.addEventListener('keydown', e => {
-  if(e.key.toLowerCase() === 'b' && S.car && S.mods && S.mods.ses && (C.driving || Math.hypot(P.x - C.x, P.z - C.z) < 4.5)){
+  if(e.key.toLowerCase() === 'b' && S.car && S.mods && S.mods.ses && ((C.driving && C.activeVeh !== 'moto') || Math.hypot(P.x - CAR_STATE.x, P.z - CAR_STATE.z) < 4.5)){
     if(document.activeElement !== $('radioCodeIn') && document.activeElement !== $('chatIn')) toggleCarTrunk();
   }
 });
@@ -7268,10 +7297,20 @@ function frame(now){
   if(ownedCarMesh){
     ownedCarMesh.position.set(CAR_STATE.x, 0, CAR_STATE.z);
     ownedCarMesh.rotation.y = CAR_STATE.h + Math.PI + ((C.driving && C.activeVeh === 'car') ? (C.slip || 0) : 0);
+    if(C.driving && C.activeVeh === 'car' && Math.abs(C.v) > 0.05){
+      ownedCarMesh.children.forEach(ch => { if(ch.name === 'wheel') ch.rotation.x -= C.v * dt * 2.8; });
+    }
   }
   if(ownedMotoMesh){
     ownedMotoMesh.position.set(MOTO_STATE.x, 0, MOTO_STATE.z);
     ownedMotoMesh.rotation.y = MOTO_STATE.h + Math.PI + ((C.driving && C.activeVeh === 'moto') ? (C.slip || 0) : 0);
+    const ridingMoto = !!(C.driving && C.activeVeh === 'moto');
+    const targetLean = (ridingMoto && Math.abs(C.v) > 0.5) ? (-C.steer * 0.36 * Math.min(1, Math.abs(C.v) / 4)) : 0;
+    ownedMotoMesh.rotation.z += (targetLean - (ownedMotoMesh.rotation.z || 0)) * Math.min(1, dt * 8);
+    ownedMotoMesh.children.forEach(ch => {
+      if(ch.name === 'motoRider') ch.visible = ridingMoto;
+      if(ch.name === 'wheel' && ridingMoto && Math.abs(C.v) > 0.05) ch.rotation.x -= C.v * dt * 3.2;
+    });
   }
   sty('hungerFill', 'width', hunger + '%');
   sty('hungerFill', 'background', hunger < 30 ? '#f87171' : '#ffb020');
@@ -8364,7 +8403,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-24-124851';
+const APP_VERSION = '2026-10-24-225559';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
