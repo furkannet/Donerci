@@ -2944,6 +2944,8 @@ function registerKnownPlayer(user, stateObj, x, z, yaw, isRecent, msgTs, extra){
     z: (isNewerPos && typeof z === 'number') ? z : ((prev && typeof prev.z === 'number') ? prev.z : (D.z - 1.2)),
     yaw: (isNewerPos && typeof yaw === 'number') ? yaw : ((prev && typeof prev.yaw === 'number') ? prev.yaw : 0),
     driving: (isNewerPos && typeof ex.driving === 'boolean') ? ex.driving : !!(prev && prev.driving),
+    avatarHidden: (isNewerPos && typeof ex.avatarHidden === 'boolean') ? ex.avatarHidden : !!(prev && prev.avatarHidden),
+    pof: (isNewerPos && typeof ex.pof === 'string') ? ex.pof : ((prev && typeof prev.pof === 'string') ? prev.pof : ''),
     car: (isNewerPos && ex.car) ? ex.car : ((st && st.car) || (prev && prev.car) || null),
     cx: (isNewerPos && typeof ex.cx === 'number') ? ex.cx : ((prev && typeof prev.cx === 'number') ? prev.cx : -6.5),
     cz: (isNewerPos && typeof ex.cz === 'number') ? ex.cz : ((prev && typeof prev.cz === 'number') ? prev.cz : -24),
@@ -3228,6 +3230,7 @@ function getMyWorldPos(){
   if(CM.driving) return {x: CM.x, z: CM.z, yaw: CM.h + Math.PI, driving: false};
   return {x: P.x, z: P.z, yaw: P.yaw, driving: false};
 }
+const shouldHideMyAvatar = () => !!(C.driving || D.driving || CM.driving || passengerOf);
 function requestOnlinePing(){
   const now = Date.now();
   if(now - lastPingSent < 2000) return;
@@ -3238,7 +3241,8 @@ function requestOnlinePing(){
   const gunId = (S.hand && S.hand.id && S.hand.id !== 'sarjor' && !C.driving && !D.driving && !CM.driving) ? S.hand.id : '';
   const rcVal = typeof myRadioCode === 'string' ? myRadioCode : '';
   const ctrkVal = !!(S.mods && S.mods.ses && C.trunkOpen);
-  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: S.car, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), csteer: Number((C.steer || 0).toFixed(2)), chaz: !!C.hazard, cbrk: !!C.braking, cbm: !!C.beamOn, mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
+  const pofVal = passengerOf ? String(passengerOf).toLowerCase() : '';
+  const pkt = {type: 'ping', user: myName, target: activeFriendAcct || '', room: activeFriendAcct || myName, x: wp.x, z: wp.z, yaw: wp.yaw, driving: wp.driving, avatarHidden: shouldHideMyAvatar(), pof: pofVal, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: S.car, cx: Number(C.x.toFixed(2)), cz: Number(C.z.toFixed(2)), ch: Number(C.h.toFixed(2)), cslip: Number((C.slip || 0).toFixed(2)), csteer: Number((C.steer || 0).toFixed(2)), chaz: !!C.hazard, cbrk: !!C.braking, cbm: !!C.beamOn, mods: S.mods, plate: S.plate, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   postToRelays(pkt, true);
 }
@@ -3253,7 +3257,9 @@ function broadcastCoopPos(force){
   const gunId = (S.hand && S.hand.id && S.hand.id !== 'sarjor' && !C.driving && !D.driving && !CM.driving) ? S.hand.id : '';
   const rcVal = typeof myRadioCode === 'string' ? myRadioCode : '';
   const ctrkVal = !!(S.mods && S.mods.ses && C.trunkOpen);
-  const sigKey = `${csteerVal > 0.3 ? 1 : (csteerVal < -0.3 ? -1 : 0)}|${chazVal}|${cbrkVal}|${cbmVal}|${gunId}|${rcVal}|${ctrkVal}`;
+  const pofVal = passengerOf ? String(passengerOf).toLowerCase() : '';
+  const hideVal = shouldHideMyAvatar();
+  const sigKey = `${csteerVal > 0.3 ? 1 : (csteerVal < -0.3 ? -1 : 0)}|${chazVal}|${cbrkVal}|${cbmVal}|${gunId}|${rcVal}|${ctrkVal}|${pofVal}|${hideVal}`;
   const sigChanged = sigKey !== lastBroadSigKey;
   const moved = Math.hypot(wp.x - lastBroadX, wp.z - lastBroadZ) > 0.02 || Math.abs(wp.yaw - lastBroadYaw) > 0.05 || sigChanged;
   const currentRoom = activeFriendAcct || myName;
@@ -3267,8 +3273,8 @@ function broadcastCoopPos(force){
   const cslipVal = Number((C.slip || 0).toFixed(2));
   // Yürürken ve araba sürerken anında (~80ms) WebSocket üzerinden gönder ki karşıda hiç beklemeden görünsün
   const pkt = force
-    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
-    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, ts: now};
+    ? {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, avatarHidden: hideVal, pof: pofVal, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, look: S.look, state: {level: S.level, money: S.money, day: S.day, look: S.look, hand: S.hand, car: S.car, mods: S.mods, plate: S.plate, unlock: S.unlock, kar: S.kar, mk: S.mk}, ts: now}
+    : {type: 'pos', user: myName, target: activeFriendAcct || '', room: currentRoom, x: Number(wp.x.toFixed(2)), z: Number(wp.z.toFixed(2)), yaw: Number(wp.yaw.toFixed(2)), driving: wp.driving, avatarHidden: hideVal, pof: pofVal, gun: gunId, rc: rcVal, ctrk: ctrkVal, car: S.car, cx: cxVal, cz: czVal, ch: chVal, cslip: cslipVal, csteer: csteerVal, chaz: chazVal, cbrk: cbrkVal, cbm: cbmVal, mods: S.mods, plate: S.plate, st: stVal, nm: nmVal, wt: wtVal, ts: now};
   if(coopChan){ try{ coopChan.postMessage(pkt); }catch(e){} }
   const minInterval = moved ? 80 : 2500;
   if(!force && !sigChanged && now - lastCoopBroadcast < minInterval) return;
@@ -3644,7 +3650,8 @@ function updateFriendCompanion(dt){
     const peerMods = (on && on.mods && Object.keys(on.mods).length ? on.mods : (peerAcct && peerAcct.mods)) || {};
     const peerPlate = (on && on.plate) || (peerAcct && peerAcct.plate) || '06 ABC 123';
     const isDrivingCar = !!(on && on.driving);
-    fc.g.visible = !isDrivingCar;
+    const isPassengerInCar = !!(on && on.pof);
+    fc.g.visible = !(isDrivingCar || isPassengerInCar || (on && on.avatarHidden));
     if(peerCarId){
       const sig = `${peerCarId}|${peerMods.paint || ''}|${!!peerMods.spoiler}|${!!peerMods.neon}|${!!peerMods.jant}|${!!peerMods.far}|${!!peerMods.sprey}|${!!peerMods.ses}|${peerPlate}`;
       if(!fc.carMesh || fc.carSignature !== sig){
@@ -4327,7 +4334,29 @@ window.addEventListener('keydown', e => {
   }
 });
 
-// Arkadaşın arabasına yolcu olarak binme / inme
+// Arkadaşın arabasına yolcu olarak binme / inme (En fazla 5 kişi: 1 şoför + 4 yolcu)
+const MAX_CAR_OCCUPANTS = 5;
+function getCarOccupantCount(ownerKey){
+  const ok = String(ownerKey || '').toLowerCase();
+  if(!ok) return 0;
+  let count = 0;
+  const myName = ((S.settings && S.settings.name) || (getProfile() && getProfile().user) || '').toLowerCase();
+  if(myName && ok === myName){
+    if(C.driving) count++;
+  } else {
+    const ownerOn = onlineFriends[ok];
+    if(ownerOn && ownerOn.driving) count++;
+  }
+  if(passengerOf && passengerOf.toLowerCase() === ok) count++;
+  for(const k of Object.keys(roomPeers)){
+    if(k === ok) continue;
+    const on = onlineFriends[k];
+    if(on && on.pof && on.pof.toLowerCase() === ok && isFriendActive(on.user || k)){
+      count++;
+    }
+  }
+  return count;
+}
 function findNearbyPeerCar(){
   for(const k of Object.keys(roomPeers)){
     const fc = roomPeers[k];
@@ -4346,9 +4375,17 @@ function togglePassengerSeat(){
   }
   const nearKey = findNearbyPeerCar();
   if(!nearKey) return;
+  const currentOcc = getCarOccupantCount(nearKey);
+  if(currentOcc >= MAX_CAR_OCCUPANTS){
+    flash(`🚫 Araba dolu! (En fazla ${MAX_CAR_OCCUPANTS} kişi binebilir: ${currentOcc}/${MAX_CAR_OCCUPANTS})`, '#f87171');
+    beep(200, 0.2, 'sawtooth');
+    return;
+  }
   passengerOf = nearKey;
+  playerMesh.visible = false;
   const fc = roomPeers[nearKey];
-  flash(`💺 ${fc ? fc.name : 'Arkadaşının'} arabasına yolcu olarak bindin!`, '#4ade80');
+  const newOcc = getCarOccupantCount(nearKey);
+  flash(`💺 ${fc ? fc.name : 'Arkadaşının'} arabasına bindin! (${newOcc}/${MAX_CAR_OCCUPANTS} kişi)`, '#4ade80');
   broadcastCoopPos(true);
 }
 if($('passBtn')) $('passBtn').onclick = togglePassengerSeat;
@@ -4780,12 +4817,18 @@ function serve(auto = false){
 $('serve').onclick = () => serve();
 
 // Kurye ve Telefon Siparişi teslim etme (2 katı ücret!)
-function deliverPhoneOrder(){
+function phonePlateMatchesOrder(){
+  if(!phoneOrder || !plate.length) return false;
+  return phoneOrder.order.slice().sort().join(',') === plate.map(p => p.id).sort().join(',');
+}
+function deliverPhoneOrder(fromWaiter = false){
   if(!phoneOrder){ flash('Şu an bekleyen telefon siparişi yok!', '#f87171'); return; }
+  if((S.kar.garson || S.mk.garson) && waiterMesh.visible && !fromWaiter){
+    flash('Garson paketi kuryeye götürüyor', '#7dd3fc');
+    return;
+  }
   if(plate.length === 0){ flash('Önce telefon siparişini tabakta hazırla!', '#f87171'); return; }
-  const want = phoneOrder.order.slice().sort().join(',');
-  const got = plate.map(p => p.id).sort().join(',');
-  if(want !== got){
+  if(!phonePlateMatchesOrder()){
     flash(`🛵 Tabaktaki malzemeler telefon siparişiyle (${phoneOrder.order.map(id => ING[id]).join(', ')}) uyuşmuyor!`, '#f87171');
     beep(200, 0.2, 'sawtooth');
     return;
@@ -6691,8 +6734,11 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
     const wLegL = waiterMesh.getObjectByName('legL'), wLegR = waiterMesh.getObjectByName('legR');
     const wArmL = waiterMesh.getObjectByName('armL'), wArmR = waiterMesh.getObjectByName('armR');
     if(waiterState.state === 'idle'){
+      const canDeliverPhone = (S.kar.kurye || S.mk.kurye) && phonePlateMatchesOrder();
       const needCust = custs.find(c => c.diningState === 'waiting_food' && c.tableSlot);
-      if(needCust){
+      if(canDeliverPhone){
+        waiterState.state = 'to_phone_counter';
+      } else if(needCust){
         waiterState.targetCust = needCust;
         waiterState.targetTb = needCust.tableSlot;
         waiterState.state = 'to_counter';
@@ -6708,7 +6754,8 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
           waiterMesh.rotation.y = Math.PI;
         }
       }
-    } else if(waiterState.state === 'to_counter'){
+    } else if(waiterState.state === 'to_counter' || waiterState.state === 'to_phone_counter'){
+      const isPhoneDelivery = waiterState.state === 'to_phone_counter';
       const dx = 7.4 - waiterState.x, dz = -2.2 - waiterState.z;
       const d = Math.hypot(dx, dz);
       if(d > 0.12){
@@ -6718,7 +6765,25 @@ comoWalkers = comoWalkers.filter(w => !w.dead);
         wWalk = true;
       } else {
         waiterTray.visible = true;
-        waiterState.state = 'to_table';
+        waiterState.state = isPhoneDelivery ? 'to_courier' : 'to_table';
+      }
+    } else if(waiterState.state === 'to_courier'){
+      if(!phonePlateMatchesOrder()){
+        waiterTray.visible = false;
+        waiterState.state = 'idle';
+      } else {
+        const dx = 6.4 - waiterState.x, dz = 3.0 - waiterState.z;
+        const d = Math.hypot(dx, dz);
+        if(d > 0.14){
+          waiterState.x += (dx / d) * 3.6 * dt;
+          waiterState.z += (dz / d) * 3.6 * dt;
+          waiterMesh.rotation.y = Math.atan2(dx, dz);
+          wWalk = true;
+        } else {
+          deliverPhoneOrder(true);
+          waiterTray.visible = false;
+          waiterState.state = 'idle';
+        }
       }
     } else if(waiterState.state === 'to_table'){
       const tb = waiterState.targetTb;
@@ -6849,13 +6914,16 @@ function frame(now){
   walkerHit(dt);
   if(!escPaused){ smokeUpdate(dt); smashUpdate(dt); engineUpdate(dt); }
   if(CM.driving){
+    playerMesh.visible = false;
     camera.position.set(CM.x - Math.sin(CM.h) * 4.5, 2.6, CM.z - Math.cos(CM.h) * 4.5);
     camera.rotation.set(P.pitch - 0.15, CM.h + Math.PI + (P.yaw + Math.PI / 2), 0);
   } else if(C.driving){
+    playerMesh.visible = false;
     // arkadan takip kamerası: araba gövdesi görüşü kapatmasın, yol önde görünsün
     camera.position.set(C.x - Math.sin(C.h) * C.camDist, 1.2 + C.camDist * 0.28, C.z - Math.cos(C.h) * C.camDist);
     camera.rotation.set(P.pitch - 0.15, C.h + Math.PI + (P.yaw + Math.PI / 2), 0);
   } else if(D.driving){
+    playerMesh.visible = false;
     const fx = -Math.sin(D.h), fz = -Math.cos(D.h);
     camera.position.set(D.x + fx * 2.8 * TS, 1.7, D.z + fz * 2.8 * TS);
     camera.rotation.set(P.pitch, D.h + P.yaw + Math.PI / 2, 0);
@@ -6925,7 +6993,9 @@ function frame(now){
   const nearPeerCarKey = (!C.driving && !D.driving && !CM.driving) ? findNearbyPeerCar() : null;
   disp('passBtn', (passengerOf || nearPeerCarKey) ? 'block' : 'none');
   if(passengerOf || nearPeerCarKey){
-    txt('passBtn', passengerOf ? '🚪 Yolcu İn' : '💺 Yolcu Bin');
+    const occKey = passengerOf || nearPeerCarKey;
+    const occCnt = getCarOccupantCount(occKey);
+    txt('passBtn', passengerOf ? `🚪 Yolcu İn (${occCnt}/${MAX_CAR_OCCUPANTS})` : `💺 Yolcu Bin (${occCnt}/${MAX_CAR_OCCUPANTS})`);
   }
   disp('hazardBtn', C.driving ? 'block' : 'none');
   txt('hazardBtn', C.hazard ? "🚨 4'lüler: Açık" : "🚨 4'lüleri Yak");
@@ -7017,7 +7087,8 @@ function frame(now){
   if(nearWheel) txt('wheelBtn', `🎡 Çark (100₺ · ${wheelSpinsLeft}/3)`);
   const hasKurye = !!(S.kar.kurye || S.mk.kurye);
   const nearKurye = !C.driving && !D.driving && !CM.driving && (nc || Math.hypot(P.x - 6.4, P.z - 3.8) < 4.5);
-  disp('kuryeBtn', (hasKurye && phoneOrder && nearKurye) ? 'block' : 'none');
+  const hasWaiter = !!(S.kar.garson || S.mk.garson) && waiterMesh.visible;
+  disp('kuryeBtn', (hasKurye && phoneOrder && nearKurye && !hasWaiter) ? 'block' : 'none');
   if(hasKurye && phoneOrder && nearKurye) txt('kuryeBtn', `🛵 Kurye Teslim (${Math.ceil(phoneOrder.t)}s)`);
   const hIn = inHouse(), hNear = nearHome() && !D.driving;
   disp('home', (hIn || hNear) && !D.driving ? 'block' : 'none');
@@ -7985,7 +8056,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-24-005403';
+const APP_VERSION = '2026-10-24-121143';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
