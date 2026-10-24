@@ -234,6 +234,7 @@ button small{font-size:9px;margin-top:0}
 <button id="trunkBtn" style="display:none;background:#1e3a52;border-color:#38bdf8;font-weight:700">🔊 Bagaj: Kapalı</button>
 <button id="raceBtn" style="display:none;background:#14532d;border-color:#4ade80;font-weight:700">🏁 Yarış (500₺)</button>
 <button id="kuryeBtn" style="display:none;background:#b45309;border-color:#ffd54a;font-weight:700">🛵 Kurye Teslim</button>
+<button id="bankBtn" style="display:none;background:#0f766e;border-color:#2dd4bf;font-weight:700">🏦 Banka & ATM</button>
 </div>
 <button id="driftBtn" style="display:none;position:fixed;left:150px;bottom:706px;z-index:3;padding:12px 14px;background:#4a3a1e;font-weight:700;font-size:15px">🌀 Drift: Açık</button>
 <button id="hornBtn" style="display:none;position:fixed;left:290px;bottom:706px;z-index:3;padding:12px 14px;background:#5a1e1e;font-weight:700;font-size:15px">📯 Korna (H)</button>
@@ -398,6 +399,28 @@ button small{font-size:9px;margin-top:0}
       <button id="moneySendConfirm" class="wide" style="margin:0;background:#16a34a;border-color:#4ade80">💸 Gönder</button>
       <button id="moneySendCancel" class="wide" style="margin:0">İptal</button>
     </div>
+  </div>
+</div>
+<div id="bankModal" class="modal" style="z-index:26">
+  <div class="card" style="text-align:center;max-width:390px">
+    <h2>🏦 DönerBank & ATM</h2>
+    <p style="font-size:12px;margin-bottom:8px">Bankadaki paran her vardiya sonunda <b>%15 faiz</b> kazandırır! Acil nakit lazımsa kredi çekebilirsin.</p>
+    <div id="bankInfoBox" style="padding:10px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid var(--line);font-size:14px;line-height:1.6;margin-bottom:8px"></div>
+    <input id="bankAmtIn" type="number" min="1" placeholder="Tutar yaz (₺)..." style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--line);background:#222b38;color:var(--ink);font-size:15px">
+    <div style="display:flex;gap:5px;margin-top:6px;justify-content:center;flex-wrap:wrap">
+      <button class="bQuick" data-v="100" style="padding:5px 8px;font-size:12px">+100₺</button>
+      <button class="bQuick" data-v="500" style="padding:5px 8px;font-size:12px">+500₺</button>
+      <button class="bQuick" data-v="2000" style="padding:5px 8px;font-size:12px">+2000₺</button>
+      <button id="bankAllBtn" style="padding:5px 8px;font-size:12px;background:#1e3a52;border-color:#38bdf8">Tümü</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+      <button id="bankDepBtn" style="padding:9px;background:#15803d;border-color:#4ade80;font-weight:700">📥 Para Yatır</button>
+      <button id="bankWitBtn" style="padding:9px;background:#1d4ed8;border-color:#60a5fa;font-weight:700">📤 Para Çek</button>
+      <button id="bankLoanBtn" style="padding:9px;background:#b45309;border-color:#fbbf24;font-weight:700">💳 Kredi Çek</button>
+      <button id="bankPayLoanBtn" style="padding:9px;background:#6d28d9;border-color:#c084fc;font-weight:700">🧾 Borç Öde</button>
+    </div>
+    <div id="bankMsg" style="min-height:18px;font-size:12px;margin-top:6px;font-weight:700;color:#4ade80"></div>
+    <button id="bankCloseBtn" class="wide" style="margin-top:8px">Kapat</button>
   </div>
 </div>
 <div id="chatBox" class="panel" style="display:none;left:10px;top:92px;width:250px;max-height:220px;z-index:8;padding:8px;flex-direction:column;gap:6px">
@@ -576,6 +599,8 @@ const DEF = {
   look:{shirt:'#3a6ea5', pants:'#2a2a2a', skin:'#f1c27d', hair:'#1b1b1b'},
   mods:{paint:null, spoiler:false, turbo:false, neon:false, ses:false},
   car:null,
+  bank:0,
+  loan:0,
   seen:false
 };
 let activeFriendAcct = null; // aktif arkadaşın haritasındaysak arkadaşın adı, kendi haritamızdaysak null
@@ -714,13 +739,16 @@ let tamponUsed = false;
 let setOpen = false;
 let running = false; // koşu (düğme ya da Shift)
 let thirdPerson = false; // P: iç görüş / dış görüş (yürürken)
-// satılık arabalar (galeri)
+// satılık arabalar ve motorlar (galeri)
 const CARS = [
+  {id:'scooter', name:'🛵 Scooter Motor', price:8000, type:'moto', color:'#0ea5e9', speed:7.5},
   {id:'kucuk', name:'Küçük Araba', price:10000, type:'sedan', color:'#f1c40f', speed:6},
-  {id:'sedan', name:'Sedan', price:25000, type:'sedan', color:'#2980b9', speed:7},
   {id:'tofas', name:'Tofaş', price:18000, type:'sedan', color:'#8b1a1a', speed:6.5},
+  {id:'sedan', name:'Sedan', price:25000, type:'sedan', color:'#2980b9', speed:7},
+  {id:'yaris_motor', name:'🏍️ Yarış Motoru', price:30000, type:'moto', color:'#dc2626', speed:10.5},
   {id:'taksi', name:'Taksi', price:35000, type:'taxi', color:'#f1c40f', speed:7.5},
   {id:'minibus', name:'Minibüs', price:50000, type:'van', color:'#f5f6fa', speed:7},
+  {id:'super_motor', name:'⚡ Süper Motor (Ninja)', price:60000, type:'moto', color:'#16a34a', speed:12},
   {id:'spor', name:'Spor Araba', price:75000, type:'sport', color:'#c0392b', speed:9},
   {id:'luks', name:'Lüks Araba', price:100000, type:'sedan', color:'#1c1c1c', speed:10}
 ];
@@ -1804,6 +1832,48 @@ dealer.position.set(2.0, 0, 0);
 dealer.rotation.y = Math.PI / 2;
 galeri.add(dealer);
 
+// Banka & ATM binası: sol kaldırımda, market ile galeri arasında (-9.8, 0, -14.5)
+const BANK_POS = {x: -9.8, z: -14.5, atmX: -8.0, atmZ: -14.5};
+const bankGroup = new THREE.Group();
+bankGroup.position.set(BANK_POS.x, 0, BANK_POS.z);
+scene.add(bankGroup);
+[[B(3, 0.1, 4.6), 0xe2e8f0, 0, 0.05, 0],
+ [B(0.1, 3.6, 4.6), 0x0f172a, -1.45, 1.8, 0],
+ [B(3, 3.6, 0.1), 0x1e293b, 0, 1.8, -2.25],
+ [B(3, 3.6, 0.1), 0x1e293b, 0, 1.8, 2.25],
+ [B(3.2, 0.25, 4.8), 0x0f766e, 0, 3.7, 0]
+].forEach(([geo, col, x, y, z]) => addTo(bankGroup, geo, M(col), x, y, z));
+// Ön mermer sütunlar
+[-1.8, 1.8].forEach(z => addTo(bankGroup, new THREE.CylinderGeometry(0.16, 0.18, 3.5, 8), M(0xf8fafc), 1.42, 1.75, z));
+const bankGlass = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 2.2),
+  new THREE.MeshLambertMaterial({color: 0x99f6e4, transparent: true, opacity: 0.28, side: THREE.DoubleSide}));
+bankGlass.position.set(1.5, 1.4, 0);
+bankGlass.rotation.y = Math.PI / 2;
+bankGroup.add(bankGlass);
+const bankSignTex = tex(256, 96, (g, w, h) => {
+  g.fillStyle = '#0f766e'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#fbbf24'; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
+  g.fillStyle = '#fef08a'; g.font = 'bold 38px sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('🏦 BANKA & ATM', w / 2, h / 2 + 2);
+});
+const bankSign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.9), new THREE.MeshBasicMaterial({map: bankSignTex}));
+bankSign.position.set(1.54, 3.1, 0);
+bankSign.rotation.y = Math.PI / 2;
+bankGroup.add(bankSign);
+// ATM Cihazı (Bankanın önünde, kaldırımda ışıklı ekranlı)
+const atmMachine = new THREE.Group();
+atmMachine.position.set(1.75, 0.3, -1.1);
+addTo(atmMachine, B(0.55, 1.65, 0.65), M(0x0f766e), 0, 0.82, 0);
+addTo(atmMachine, B(0.1, 0.45, 0.48), new THREE.MeshBasicMaterial({color: 0x38bdf8}), 0.28, 1.15, 0); // ATM mavi ekran
+addTo(atmMachine, B(0.12, 0.08, 0.36), M(0x16a34a), 0.28, 0.82, 0); // para haznesi
+bankGroup.add(atmMachine);
+const banker = human(0x0f766e, 0x0f172a, pick(SKINS), pick(HAIRS));
+if(typeof makeNameSprite === 'function') banker.add(makeNameSprite('🏦 BANKACI'));
+banker.position.set(2.0, 0, 0.6);
+banker.rotation.y = Math.PI / 2;
+bankGroup.add(banker);
+
 // arabacı: karavanın yanında bekler; tünelden gece yoluna (ve geri) götürür
 const driver = human(0xf1c40f, 0x222222, pick(SKINS), pick(HAIRS));
 driver.position.set(5.6, 0, 6.2);
@@ -2004,6 +2074,47 @@ const TAXI_M = new THREE.MeshBasicMaterial({color:0xffd000});
 function car(color, type = 'sedan'){
   const g = new THREE.Group();
   const paint = M(color);
+  if(type === 'moto'){
+    // 3D Yarış Motoru / Motosiklet: gövde, yakıt deposu, sele, gidon, ön cam, egzoz, ön/arka far ve tekerlekler
+    addTo(g, B(0.42, 0.46, 1.75), paint, 0, 0.56, 0); // ana şasi ve karenaj
+    addTo(g, B(0.46, 0.26, 0.68), paint, 0, 0.84, -0.25); // yakıt deposu
+    addTo(g, B(0.38, 0.14, 0.72), TRIM_M, 0, 0.78, 0.42); // sele (koltuk)
+    addTo(g, B(0.36, 0.22, 0.45), paint, 0, 0.88, 0.86); // arka kuyruk
+    addTo(g, B(0.38, 0.32, 0.06), GLASS_M, 0, 1.04, -0.68).rotation.x = 0.45; // ön rüzgarlık camı
+    addTo(g, B(0.86, 0.06, 0.06), M(0xd1d5db), 0, 0.98, -0.58); // gidon
+    addTo(g, B(0.16, 0.07, 0.08), TRIM_M, -0.38, 0.98, -0.58); // sol elcik
+    addTo(g, B(0.16, 0.07, 0.08), TRIM_M, 0.38, 0.98, -0.58);  // sağ elcik
+    addTo(g, B(0.22, 0.58, 0.14), M(0x9ca3af), 0, 0.62, -0.78); // ön amortisör çatalı
+    // egzoz borusu
+    const mEx = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.75, 8).rotateX(Math.PI / 2), M(0x9ca3af));
+    mEx.position.set(0.26, 0.42, 0.58);
+    g.add(mEx);
+    // ön far ve arka stop lambası (GEO.light kullanarak far sistemiyle tam uyumlu)
+    addTo(g, GEO.light, HEAD_M, 0, 0.82, -0.92);
+    addTo(g, GEO.light, TAIL_M, 0, 0.88, 1.08);
+    // plaka (arkada)
+    addTo(g, GEO.plate, PLATE_M, 0, 0.68, 1.10);
+    // ön ve arka motosiklet tekerlekleri
+    [[0, 0.82], [0, -0.82]].forEach(([x, z]) => {
+      const w = addTo(g, GEO.wheel, TIRE_M, x, 0.36, z);
+      w.scale.set(0.65, 1, 1);
+      w.name = 'wheel';
+      addTo(w, GEO.rim, RIM_M, 0, 0, 0);
+    });
+    // üzerinde kasklı sürücü figürü
+    const rider = new THREE.Group();
+    addTo(rider, B(0.42, 0.58, 0.26), M(0x1f2937), 0, 1.18, 0.18).rotation.x = 0.35; // gövde öne eğik
+    addTo(rider, new THREE.SphereGeometry(0.21, 10, 8), paint, 0, 1.58, -0.02); // yarış kaskı
+    addTo(rider, B(0.32, 0.11, 0.06), GLASS_M, 0, 1.58, -0.20); // kask vizörü
+    g.add(rider);
+    const carSpot = new THREE.Mesh(new THREE.CircleGeometry(2.4, 16), carSpotMat);
+    carSpot.rotation.x = -Math.PI / 2;
+    carSpot.position.set(0, 0.05, -4.2);
+    g.add(carSpot);
+    g.rotation.y = Math.PI;
+    addBlob(g, 0.75, 1.9);
+    return g;
+  }
   const isSport = type === 'sport';
   if(isSport){
     // spor araba: alçak ve geniş gövde, şık tavan, ön/arka/yan camlar ve hava girişi
@@ -2405,7 +2516,7 @@ function renderStats(){
     `<span id="lvlBtn" style="cursor:pointer;text-decoration:underline">Seviye <b>${S.level || 1}</b> <small>(${Math.max(0, xpFor((S.level || 1) + 1) - (S.xp || 0)).toLocaleString('tr-TR')}₺ kaldı)</small></span> · Gün <b>${S.day}</b> · ${m}:${String(s).padStart(2,'0')}<br>` +
     (() => { const lv = S.level || 1, lo = xpFor(lv), hi = xpFor(lv + 1); const pct = Math.min(100, Math.max(0, ((S.xp || 0) - lo) / (hi - lo) * 100)); return `<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:2px 0 4px">` + `<i style="display:block;height:100%;width:${pct}%;background:#ffd54a"></i></div>`; })() +
     `Kazanç <b>${shiftEarned}</b>₺<br>` +
-    `Para <b>${S.money}₺</b><br>` +
+    `Para <b>${S.money}₺</b>` + ((S.bank || 0) > 0 ? ` · 🏦 <b>${S.bank}₺</b>` : '') + ((S.loan || 0) > 0 ? ` · 💳 <b style="color:#f87171">-${S.loan}₺</b>` : '') + `<br>` +
     (rushOn ? '<br><span style="color:#ffd54a">⚡ RUSH</span>' : '') +
     (hotLeft > 0 ? '<br><span style="color:#ff8a4c">🔥 Sıcak Saat x2</span>' : '') +
     (weather === 'rain' ? ' 🌧' : '') + hungerHTML();
@@ -2555,6 +2666,7 @@ const canWork = () => active() && nearCounter() && shutterOpen;
 function free(x, z){
   if(x < -41 || x > 21.5 || z < -135 || z > 6) return false; // sol taraf: park da yürünebilir
   if(x > -11.4 && x < -8.2 && z > -8.5 && z < -3.5) return false; // market binası
+  if(x > -11.4 && x < -8.2 && z > -16.9 && z < -12.1) return false; // banka binası
   if(x > -11.4 && x < -8.2 && z > -26.5 && z < -21.5) return false; // galeri binası
   if(x > -7.5 && x < -6.1 && z > -62 && z < -42) return false; // benzin istasyonu (kaldırımda)
   // ev ve bahçe: ev yalnızca kapıdan girilir; bahçeye evin yanındaki koridordan geçilir
@@ -3038,13 +3150,15 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
   if(!def) return null;
   const mods = modsObj || {};
   const isSport = def.type === 'sport';
+  const isMoto = def.type === 'moto';
   const stripeY = isSport ? 0.73 : 0.96;
-  const sigY = isSport ? 0.62 : 0.85;
-  const sigZ = isSport ? 2.20 : 2.12;
+  const sigY = isMoto ? 0.82 : (isSport ? 0.62 : 0.85);
+  const sigZ = isMoto ? 0.92 : (isSport ? 2.20 : 2.12);
+  const sigX = isMoto ? 0.28 : 0.85;
   const spTopY = isSport ? 0.96 : 1.25;
   const spLegY = isSport ? 0.82 : 1.1;
   const mesh = car(mods.paint || def.color, def.type);
-  if(mods.sprey){
+  if(mods.sprey && !isMoto){
     const stripeMat = M(0x111111);
     [-0.35, 0.35].forEach(x => {
       const s = new THREE.Mesh(B(0.2, 0.02, 4.2), stripeMat);
@@ -3076,12 +3190,12 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
     else { tails.push(ch); ch.material = tailOff; }
   });
   const sigMat = new THREE.MeshBasicMaterial({color: 0xffa500});
-  [[-0.85, -sigZ], [-0.85, sigZ]].forEach(([x, z]) => {
+  [[-sigX, -sigZ], [-sigX, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
     m.position.set(x, sigY, z); m.visible = false;
     mesh.add(m); sigL.push(m);
   });
-  [[0.85, -sigZ], [0.85, sigZ]].forEach(([x, z]) => {
+  [[sigX, -sigZ], [sigX, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
     m.position.set(x, sigY, z); m.visible = false;
     mesh.add(m); sigR.push(m);
@@ -3093,7 +3207,7 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
   beamSpot.visible = false;
   mesh.add(beamSpot);
   mesh.userData.lights = {heads, tails, sigL, sigR, headOn, headOff, tailOn, tailOff, beamSpot};
-  if(mods.spoiler){
+  if(mods.spoiler && !isMoto){
     const sp = new THREE.Mesh(B(1.8, 0.08, 0.3), M(0x111111));
     sp.position.set(0, spTopY, 2.0);
     mesh.add(sp);
@@ -3104,15 +3218,15 @@ function buildPeerCarMesh(carId, modsObj, plateStr, ownerName){
     });
   }
   if(mods.neon){
-    const n = new THREE.Mesh(B(1.9, 0.02, 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
+    const n = new THREE.Mesh(B(isMoto ? 0.65 : 1.9, 0.02, isMoto ? 1.8 : 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
     n.position.set(0, 0.2, 0);
     mesh.add(n);
   }
-  if(mods.ses && typeof attachTrunkSoundSystem === 'function'){
+  if(mods.ses && !isMoto && typeof attachTrunkSoundSystem === 'function'){
     mesh.userData.trunkSys = attachTrunkSoundSystem(mesh, mods.paint || def.color, isSport);
   }
   if(ownerName){
-    const sp = makeNameSprite('🚗 ' + ownerName);
+    const sp = makeNameSprite((isMoto ? '🏍️ ' : '🚗 ') + ownerName);
     sp.position.y = 2.0;
     mesh.add(sp);
   }
@@ -4942,8 +5056,14 @@ function endShift(reason){
   } else if(met){
     const bonus = 100 + S.day * 25;
     S.money += bonus;
+    let interestMsg = '';
+    if((S.bank || 0) > 0){
+      const interest = Math.max(1, Math.round(S.bank * 0.15));
+      S.bank += interest;
+      interestMsg = ` Banka faizi: +${interest.toLocaleString('tr-TR')}₺!`;
+    }
     title = 'Vardiya Tamam!';
-    text = `Hedefi tutturdun: ${shiftEarned}₺. Bonus +${bonus}₺. Yarın gün ${S.day + 1}.`;
+    text = `Hedefi tutturdun: ${shiftEarned}₺. Bonus +${bonus}₺.${interestMsg} Yarın gün ${S.day + 1}.`;
     S.day++;
   } else {
     title = 'Hedef Tutmadı';
@@ -5338,6 +5458,14 @@ canvas.addEventListener('pointerup', e => {
     else flash('Galeriye biraz yaklaş', '#f87171');
     return;
   }
+  // bankaya / ATM'ye dokunmak = banka ekranı
+  if(ray.intersectObject(bankGroup, true).length){
+    if(Math.hypot(P.x - BANK_POS.atmX, P.z - BANK_POS.atmZ) < 6){
+      askNPC('Bankacı', -7.8, -14.5, ['Paranı faize yatır, her gün %15 kazansın!', 'Acil araba veya motor için kredi çekebilirsin.']);
+      openBankModal();
+    } else flash('Bankaya veya ATM\'ye biraz yaklaş', '#f87171');
+    return;
+  }
   // arabacıya dokunmak = taksi
   if(ray.intersectObject(driver, true).length){
     // arabacıdan da araba alınır (galeri listesi)
@@ -5675,14 +5803,16 @@ function spawnOwnedCar(){
   const def = CARS.find(c => c.id === S.car);
   if(!def) return;
   const isSport = def.type === 'sport';
+  const isMoto = def.type === 'moto';
   const stripeY = isSport ? 0.73 : 0.96;
-  const sigY = isSport ? 0.62 : 0.85;
-  const sigZ = isSport ? 2.20 : 2.12;
+  const sigY = isMoto ? 0.82 : (isSport ? 0.62 : 0.85);
+  const sigZ = isMoto ? 0.92 : (isSport ? 2.20 : 2.12);
+  const sigX = isMoto ? 0.28 : 0.85;
   const spTopY = isSport ? 0.96 : 1.25;
   const spLegY = isSport ? 0.82 : 1.1;
   ownedCarMesh = car(S.mods.paint || def.color, def.type);
   // sprey boya: gövdenin üstüne iki siyah yarış şeridi
-  if(S.mods.sprey){
+  if(S.mods.sprey && !isMoto){
     const stripeMat = M(0x111111);
     [-0.35, 0.35].forEach(x => {
       const s = new THREE.Mesh(B(0.2, 0.02, 4.2), stripeMat);
@@ -5727,18 +5857,18 @@ function spawnOwnedCar(){
   // dönüş sinyalleri (turuncu, direksiyon yönüne göre yanıp söner)
   C.sigL = []; C.sigR = [];
   const sigMat = new THREE.MeshBasicMaterial({color: 0xffa500});
-  [[-0.85, -sigZ], [-0.85, sigZ]].forEach(([x, z]) => {
+  [[-sigX, -sigZ], [-sigX, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
     m.position.set(x, sigY, z); m.visible = false;
     ownedCarMesh.add(m); C.sigL.push(m);
   });
-  [[0.85, -sigZ], [0.85, sigZ]].forEach(([x, z]) => {
+  [[sigX, -sigZ], [sigX, sigZ]].forEach(([x, z]) => {
     const m = new THREE.Mesh(B(0.12, 0.12, 0.06), sigMat);
     m.position.set(x, sigY, z); m.visible = false;
     ownedCarMesh.add(m); C.sigR.push(m);
   });
   // modifiyeler: spoiler (arka), neon (alttan mavi ışık)
-  if(S.mods.spoiler){
+  if(S.mods.spoiler && !isMoto){
     const sp = new THREE.Mesh(B(1.8, 0.08, 0.3), M(0x111111));
     sp.position.set(0, spTopY, 2.0);
     ownedCarMesh.add(sp);
@@ -5750,11 +5880,11 @@ function spawnOwnedCar(){
     });
   }
   if(S.mods.neon){
-    const n = new THREE.Mesh(B(1.9, 0.02, 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
+    const n = new THREE.Mesh(B(isMoto ? 0.65 : 1.9, 0.02, isMoto ? 1.8 : 4.2), new THREE.MeshBasicMaterial({color: 0x40c4ff}));
     n.position.set(0, 0.2, 0);
     ownedCarMesh.add(n);
   }
-  if(S.mods.ses){
+  if(S.mods.ses && !isMoto){
     C.trunkSys = attachTrunkSoundSystem(ownedCarMesh, S.mods.paint || def.color, isSport);
     C.trunkSys.speakerBox.visible = !!C.trunkOpen;
     C.trunkSys.lidPivot.visible = !!C.trunkOpen;
@@ -6066,10 +6196,97 @@ function renderMods(){
     box.appendChild(d);
   });
 }
-$('galClose').onclick = () => {
+if($('galClose')) $('galClose').onclick = () => {
   setOpen = false;
   $('gal').style.display = 'none';
   renderAll();
+};
+
+// Banka & ATM sistemi: para yatır (%15 günlük faiz), para çek, kredi çek (50.000₺'ye kadar) ve borç öde
+const MAX_BANK_LOAN = 50000;
+function renderBankModal(){
+  S.bank = Math.max(0, Math.floor(S.bank || 0));
+  S.loan = Math.max(0, Math.floor(S.loan || 0));
+  if($('bankInfoBox')){
+    $('bankInfoBox').innerHTML =
+      `💵 Cüzdanındaki Nakit: <b style="color:#4ade80">${(S.money || 0).toLocaleString('tr-TR')}₺</b><br>` +
+      `🏦 Bankadaki Paran: <b style="color:#38bdf8">${S.bank.toLocaleString('tr-TR')}₺</b> <small style="color:#ffd54a">(Günlük +%15 Faiz)</small><br>` +
+      `💳 Kredi Borcun: <b style="color:${S.loan > 0 ? '#f87171' : '#9ca3af'}">${S.loan.toLocaleString('tr-TR')}₺</b> <small>(Limit: ${MAX_BANK_LOAN.toLocaleString('tr-TR')}₺)</small>`;
+  }
+}
+function openBankModal(){
+  setOpen = true;
+  if($('bankMsg')) $('bankMsg').textContent = '';
+  renderBankModal();
+  if($('bankModal')) $('bankModal').style.display = 'flex';
+}
+function closeBankModal(){
+  setOpen = false;
+  if($('bankModal')) $('bankModal').style.display = 'none';
+  renderAll();
+}
+if($('bankBtn')) $('bankBtn').onclick = openBankModal;
+if($('bankCloseBtn')) $('bankCloseBtn').onclick = closeBankModal;
+document.querySelectorAll('.bQuick').forEach(btn => {
+  btn.onclick = () => {
+    const inp = $('bankAmtIn');
+    if(!inp) return;
+    inp.value = (Number(inp.value) || 0) + (Number(btn.dataset.v) || 0);
+  };
+});
+if($('bankAllBtn')) $('bankAllBtn').onclick = () => {
+  const inp = $('bankAmtIn');
+  if(!inp) return;
+  inp.value = Math.max(S.money || 0, S.bank || 0, S.loan || 0);
+};
+if($('bankDepBtn')) $('bankDepBtn').onclick = () => {
+  const amt = Math.floor(Number($('bankAmtIn') && $('bankAmtIn').value) || 0);
+  const msg = $('bankMsg');
+  if(amt <= 0){ if(msg){ msg.style.color = '#f87171'; msg.textContent = 'Geçerli bir tutar yaz!'; } return; }
+  if((S.money || 0) < amt){ if(msg){ msg.style.color = '#f87171'; msg.textContent = 'Cüzdanında bu kadar nakit yok!'; } return; }
+  S.money -= amt;
+  S.bank = (S.bank || 0) + amt;
+  save(); renderBankModal(); renderAll(); beep(720, 0.12);
+  if(msg){ msg.style.color = '#4ade80'; msg.textContent = `📥 ${amt.toLocaleString('tr-TR')}₺ bankaya yatırıldı!`; }
+  flash(`🏦 Bankaya ${amt.toLocaleString('tr-TR')}₺ yatırdın`, '#4ade80');
+};
+if($('bankWitBtn')) $('bankWitBtn').onclick = () => {
+  const amt = Math.floor(Number($('bankAmtIn') && $('bankAmtIn').value) || 0);
+  const msg = $('bankMsg');
+  if(amt <= 0){ if(msg){ msg.style.color = '#f87171'; msg.textContent = 'Geçerli bir tutar yaz!'; } return; }
+  if((S.bank || 0) < amt){ if(msg){ msg.style.color = '#f87171'; msg.textContent = 'Bankada bu kadar paran yok!'; } return; }
+  S.bank -= amt;
+  S.money = (S.money || 0) + amt;
+  save(); renderBankModal(); renderAll(); beep(680, 0.12);
+  if(msg){ msg.style.color = '#38bdf8'; msg.textContent = `📤 ${amt.toLocaleString('tr-TR')}₺ nakit çekildi!`; }
+  flash(`🏦 Bankadan ${amt.toLocaleString('tr-TR')}₺ çektin`, '#38bdf8');
+};
+if($('bankLoanBtn')) $('bankLoanBtn').onclick = () => {
+  const amt = Math.floor(Number($('bankAmtIn') && $('bankAmtIn').value) || 0);
+  const msg = $('bankMsg');
+  if(amt <= 0){ if(msg){ msg.style.color = '#f87171'; msg.textContent = 'Çekmek istediğin kredi tutarını yaz!'; } return; }
+  if((S.loan || 0) + amt > MAX_BANK_LOAN){
+    if(msg){ msg.style.color = '#f87171'; msg.textContent = `En fazla ${MAX_BANK_LOAN.toLocaleString('tr-TR')}₺ kredi çekebilirsin!`; }
+    return;
+  }
+  const debtAdd = Math.round(amt * 1.1); // %10 kredi masrafı
+  S.money = (S.money || 0) + amt;
+  S.loan = (S.loan || 0) + debtAdd;
+  save(); renderBankModal(); renderAll(); beep(820, 0.15);
+  if(msg){ msg.style.color = '#fbbf24'; msg.textContent = `💳 ${amt.toLocaleString('tr-TR')}₺ kredi çektin!`; }
+  flash(`💳 ${amt.toLocaleString('tr-TR')}₺ kredi hesabına geçti!`, '#fbbf24');
+};
+if($('bankPayLoanBtn')) $('bankPayLoanBtn').onclick = () => {
+  const msg = $('bankMsg');
+  if((S.loan || 0) <= 0){ if(msg){ msg.style.color = '#9ca3af'; msg.textContent = 'Kredi borcun yok!'; } return; }
+  const rawAmt = Math.floor(Number($('bankAmtIn') && $('bankAmtIn').value) || S.loan);
+  const pay = Math.min(S.loan, S.money || 0, rawAmt > 0 ? rawAmt : S.loan);
+  if(pay <= 0){ if(msg){ msg.style.color = '#f87171'; msg.textContent = 'Borç ödemek için nakit paran yok!'; } return; }
+  S.money -= pay;
+  S.loan -= pay;
+  save(); renderBankModal(); renderAll(); beep(760, 0.12);
+  if(msg){ msg.style.color = '#4ade80'; msg.textContent = `🧾 ${pay.toLocaleString('tr-TR')}₺ kredi borcu ödendi!`; }
+  flash(`🧾 ${pay.toLocaleString('tr-TR')}₺ kredi borcu ödendi!`, '#4ade80');
 };
 function renderGallery(){
   const box = $('galBody');
@@ -6980,16 +7197,22 @@ function frame(now){
   sty('hungerFill', 'width', hunger + '%');
   sty('hungerFill', 'background', hunger < 30 ? '#f87171' : '#ffb020');
   const nearCar = S.car && !C.driving && !D.driving && Math.hypot(P.x - C.x, P.z - C.z) < 4;
+  const myCarDef = S.car ? CARS.find(c => c.id === S.car) : null;
+  const isMyMoto = !!(myCarDef && myCarDef.type === 'moto');
   disp('carBtn', nearCar ? 'block' : 'none');
-  // arabanın üstünde "🚗 BİN (E)" etiketi
+  if(nearCar) txt('carBtn', isMyMoto ? '🏍️ Motora Bin (E)' : '🚗 Bin (E)');
+  // arabanın/motorun üstünde "BİN (E)" etiketi
   const cl = $('carLabel');
   if(nearCar){
+    cl.textContent = isMyMoto ? '🏍️ BİN (E)' : '🚗 BİN (E)';
     const v = new THREE.Vector3(C.x, 2.2, C.z).project(camera);
     cl.style.display = 'block';
     cl.style.left = ((v.x + 1) / 2 * window.innerWidth) + 'px';
     cl.style.top = ((-v.y + 1) / 2 * window.innerHeight) + 'px';
   } else cl.style.display = 'none';
   disp('carExit', C.driving && Math.abs(C.v) < 1 ? 'block' : 'none');
+  const nearBank = !C.driving && !D.driving && !CM.driving && Math.hypot(P.x - BANK_POS.atmX, P.z - BANK_POS.atmZ) < 4.8;
+  disp('bankBtn', nearBank ? 'block' : 'none');
   const nearPeerCarKey = (!C.driving && !D.driving && !CM.driving) ? findNearbyPeerCar() : null;
   disp('passBtn', (passengerOf || nearPeerCarKey) ? 'block' : 'none');
   if(passengerOf || nearPeerCarKey){
@@ -7000,7 +7223,7 @@ function frame(now){
   disp('hazardBtn', C.driving ? 'block' : 'none');
   txt('hazardBtn', C.hazard ? "🚨 4'lüler: Açık" : "🚨 4'lüleri Yak");
   disp('radioBtn', (C.driving || passengerOf || nearCar) ? 'block' : 'none');
-  const showTrunkBtn = !!(S.car && S.mods && S.mods.ses && (C.driving || nearCar));
+  const showTrunkBtn = !!(S.car && !isMyMoto && S.mods && S.mods.ses && (C.driving || nearCar));
   disp('trunkBtn', showTrunkBtn ? 'block' : 'none');
   if(showTrunkBtn) txt('trunkBtn', C.trunkOpen ? '🔊 Bagaj: Açık' : '🔊 Bagaj & Hoparlör Aç');
   if(C.trunkSys && C.trunkOpen && myRadioCode && C.trunkSys.cones){
@@ -8056,7 +8279,7 @@ function rainSoundUpdate(){
 
 /* ================= Güncelleme kontrolü ================= */
 // Sürüm numarası yayinla.sh ile her yayında değişir. Sunucudaki version.json farklıysa oyuncuya "Yenile" uyarısı çıkar.
-const APP_VERSION = '2026-10-24-121143';
+const APP_VERSION = '2026-10-24-122957';
 let updateShown = false, latestVersion = '';
 // köşede küçük sürüm etiketi: hangi sürümde olduğumuz görünsün
 (function(){
